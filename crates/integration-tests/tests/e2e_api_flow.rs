@@ -92,11 +92,15 @@ async fn test_api_request_flow() {
 /// 测试认证流程
 #[tokio::test]
 async fn test_auth_flow() {
+    use keycompute_auth::{ApiKeyValidator, AuthService};
     use keycompute_server::extractors::AuthExtractor;
     use axum::http::HeaderMap;
     use axum::http::header::AUTHORIZATION;
 
     let mut chain = VerificationChain::new();
+
+    // 创建 AuthService
+    let auth_service = AuthService::new(ApiKeyValidator::default());
 
     // 1. 测试有效 API Key
     let mut headers = HeaderMap::new();
@@ -105,11 +109,11 @@ async fn test_auth_flow() {
         format!("Bearer {}", TEST_API_KEY).parse().unwrap(),
     );
 
-    let result = AuthExtractor::from_header(&headers);
+    let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
     let auth_ok = result.is_ok();
     chain.add_step(
         "keycompute-server::extractors",
-        "AuthExtractor::from_header",
+        "AuthExtractor::from_header_with_auth",
         "Valid API key accepted",
         auth_ok,
     );
@@ -136,7 +140,7 @@ async fn test_auth_flow() {
         "Bearer invalid-key".parse().unwrap(),
     );
 
-    let bad_result = AuthExtractor::from_header(&bad_headers);
+    let bad_result = AuthExtractor::from_header_with_auth(&bad_headers, &auth_service).await;
     chain.add_step(
         "keycompute-server::extractors",
         "AuthExtractor::reject_invalid",
@@ -146,7 +150,7 @@ async fn test_auth_flow() {
 
     // 3. 测试缺失 Authorization 头
     let empty_headers = HeaderMap::new();
-    let missing_result = AuthExtractor::from_header(&empty_headers);
+    let missing_result = AuthExtractor::from_header_with_auth(&empty_headers, &auth_service).await;
     chain.add_step(
         "keycompute-server::extractors",
         "AuthExtractor::reject_missing",

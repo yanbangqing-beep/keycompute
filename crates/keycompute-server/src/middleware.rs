@@ -75,6 +75,7 @@ pub async fn trace_id_middleware(mut req: Request, next: Next) -> Response {
 /// 限流中间件
 ///
 /// 基于用户/租户/API Key 进行请求限流
+/// 注意：此中间件应在认证中间件之后运行，以获取真实的认证信息
 pub async fn rate_limit_middleware(
     State(state): State<AppState>,
     req: Request,
@@ -96,15 +97,21 @@ pub async fn rate_limit_middleware(
         return next.run(req).await;
     };
 
-    // TODO: 实际应该调用 auth 服务获取 user_id, tenant_id, api_key_id
-    // 这里简化处理，使用 token 的哈希作为临时标识
-    // 实际生产环境应该从已验证的 AuthExtractor 中获取
-    use uuid::Uuid;
-
-    // 临时方案：从 token 派生 UUID（仅用于演示）
-    // 实际应该通过认证服务获取真实的 user_id, tenant_id, api_key_id
-    let temp_id = Uuid::new_v4();
-    let rate_key = RateLimitKey::new(temp_id, temp_id, temp_id);
+    // 使用 AuthService 验证 token 获取真实的用户信息
+    let rate_key = match state.auth.verify_api_key(token).await {
+        Ok(auth_context) => {
+            // 使用真实的 user_id, tenant_id, api_key_id 创建限流键
+            RateLimitKey::new(
+                auth_context.tenant_id,
+                auth_context.user_id,
+                auth_context.api_key_id,
+            )
+        }
+        Err(_) => {
+            // 认证失败，直接放行（由认证层处理错误）
+            return next.run(req).await;
+        }
+    };
 
     // 检查限流
     match state.rate_limiter.check_and_record(&rate_key).await {
@@ -114,7 +121,10 @@ pub async fn rate_limit_middleware(
         }
         Err(keycompute_types::KeyComputeError::RateLimitExceeded) => {
             // 触发限流
-            info!("Rate limit exceeded for token: {}", &token[..token.len().min(8)]);
+            info!(
+                "Rate limit exceeded for tenant: {}, user: {}",
+                rate_key.tenant_id, rate_key.user_id
+            );
             (
                 StatusCode::TOO_MANY_REQUESTS,
                 serde_json::json!({
@@ -124,9 +134,9 @@ pub async fn rate_limit_middleware(
                         "code": "rate_limit_exceeded"
                     }
                 })
-                    .to_string(),
+                .to_string(),
             )
-                .into_response()
+            .into_response()
         }
         Err(e) => {
             // 限流检查出错，记录错误但放行（避免阻塞正常请求）

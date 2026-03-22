@@ -2,13 +2,18 @@
 //!
 //! 自定义 Axum 提取器，用于从请求中提取认证信息等
 
-use crate::error::{ApiError, Result};
+use crate::{
+    error::{ApiError, Result},
+    state::AppState,
+};
 use axum::{
     extract::FromRequestParts,
     http::{request::Parts, HeaderMap},
 };
+use keycompute_auth::AuthContext;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// 认证提取器
@@ -22,20 +27,26 @@ pub struct AuthExtractor {
     pub tenant_id: Uuid,
     /// API Key ID
     pub api_key_id: Uuid,
+    /// 用户角色
+    pub role: String,
 }
 
 impl AuthExtractor {
     /// 创建新的认证提取器（用于测试）
-    pub fn new(user_id: Uuid, tenant_id: Uuid, api_key_id: Uuid) -> Self {
+    pub fn new(user_id: Uuid, tenant_id: Uuid, api_key_id: Uuid, role: impl Into<String>) -> Self {
         Self {
             user_id,
             tenant_id,
             api_key_id,
+            role: role.into(),
         }
     }
 
-    /// 从 Authorization 头解析
-    pub fn from_header(headers: &HeaderMap) -> Result<Self> {
+    /// 从 Authorization 头和 AuthService 解析
+    pub async fn from_header_with_auth(
+        headers: &HeaderMap,
+        auth_service: &keycompute_auth::AuthService,
+    ) -> Result<Self> {
         let auth_header = headers
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
@@ -46,32 +57,42 @@ impl AuthExtractor {
             .strip_prefix("Bearer ")
             .ok_or_else(|| ApiError::Auth("Invalid Authorization format".to_string()))?;
 
-        // TODO: 实际应该调用 auth 服务验证 token
-        // 这里简化处理，仅作演示
-        if token.starts_with("sk-") {
-            // 模拟返回
-            Ok(Self {
-                user_id: Uuid::new_v4(),
-                tenant_id: Uuid::new_v4(),
-                api_key_id: Uuid::new_v4(),
-            })
-        } else {
-            Err(ApiError::Auth("Invalid API key".to_string()))
+        // 使用 AuthService 验证 API Key
+        let auth_context = auth_service
+            .verify_api_key(token)
+            .await
+            .map_err(|e| ApiError::Auth(format!("Authentication failed: {}", e)))?;
+
+        Ok(Self::from_auth_context(auth_context))
+    }
+
+    /// 从 AuthContext 创建
+    pub fn from_auth_context(ctx: AuthContext) -> Self {
+        Self {
+            user_id: ctx.user_id,
+            tenant_id: ctx.tenant_id,
+            api_key_id: ctx.api_key_id,
+            role: ctx.role,
         }
+    }
+
+    /// 检查是否是管理员
+    pub fn is_admin(&self) -> bool {
+        self.role == "admin"
     }
 }
 
-impl<S> FromRequestParts<S> for AuthExtractor
-where
-    S: Send + Sync,
-{
+impl FromRequestParts<AppState> for AuthExtractor {
     type Rejection = ApiError;
 
     fn from_request_parts(
         parts: &mut Parts,
-        _state: &S,
+        state: &AppState,
     ) -> impl Future<Output = std::result::Result<Self, Self::Rejection>> + Send {
-        async move { Self::from_header(&parts.headers) }
+        let auth_service = Arc::clone(&state.auth);
+        let headers = parts.headers.clone();
+
+        async move { Self::from_header_with_auth(&headers, &auth_service).await }
     }
 }
 
@@ -121,28 +142,38 @@ mod tests {
     use super::*;
     use axum::http::HeaderValue;
 
-    #[test]
-    fn test_auth_extractor_from_header_valid() {
+    #[tokio::test]
+    async fn test_auth_extractor_from_header_valid() {
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", HeaderValue::from_static("Bearer sk-test123"));
+        let api_key = keycompute_auth::ApiKeyValidator::generate_key();
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {}", api_key)).unwrap(),
+        );
 
-        let result = AuthExtractor::from_header(&headers);
+        let auth_service =
+            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+        let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_auth_extractor_from_header_missing() {
+    #[tokio::test]
+    async fn test_auth_extractor_from_header_missing() {
         let headers = HeaderMap::new();
-        let result = AuthExtractor::from_header(&headers);
+        let auth_service =
+            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+        let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(matches!(result, Err(ApiError::Auth(_))));
     }
 
-    #[test]
-    fn test_auth_extractor_from_header_invalid_format() {
+    #[tokio::test]
+    async fn test_auth_extractor_from_header_invalid_format() {
         let mut headers = HeaderMap::new();
         headers.insert("Authorization", HeaderValue::from_static("Basic dXNlcjpwYXNz"));
 
-        let result = AuthExtractor::from_header(&headers);
+        let auth_service =
+            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+        let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(matches!(result, Err(ApiError::Auth(_))));
     }
 
