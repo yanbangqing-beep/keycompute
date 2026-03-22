@@ -3069,6 +3069,17 @@ version = "0.1.0"
 [[package]]
 name = "keycompute-auth"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "hex",
+ "keycompute-db",
+ "keycompute-types",
+ "sha2",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "keycompute-billing"
@@ -3153,6 +3164,15 @@ dependencies = [
 [[package]]
 name = "keycompute-pricing"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "keycompute-db",
+ "keycompute-types",
+ "rust_decimal",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "keycompute-provider-trait"
@@ -3168,10 +3188,28 @@ dependencies = [
 [[package]]
 name = "keycompute-ratelimit"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "dashmap",
+ "keycompute-types",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "keycompute-routing"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "keycompute-runtime",
+ "keycompute-types",
+ "rust_decimal",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "keycompute-runtime"

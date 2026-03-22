@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+keycompute-types = { workspace = true }
+keycompute-db = { workspace = true }
+async-trait = "0.1"
+rust_decimal = "1.40"
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
