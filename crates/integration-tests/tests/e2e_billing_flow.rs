@@ -4,7 +4,7 @@
 
 use integration_tests::common::VerificationChain;
 use integration_tests::mocks::MockExecutionContext;
-use integration_tests::mocks::database::{MockUsageLog, MockDistributionRecord};
+use integration_tests::mocks::database::MockUsageLog;
 use keycompute_billing::{calculate_amount, UsageSource};
 use keycompute_distribution::{DistributionShare, DistributionLevel};
 use keycompute_types::{PricingSnapshot, UsageAccumulator};

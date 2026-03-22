@@ -57,7 +57,7 @@ async fn test_full_request_chain() {
     );
 
     // 2. 创建运行时状态存储
-    let account_states = Arc::new(AccountStateStore::new());
+    let _account_states = Arc::new(AccountStateStore::new());
     chain.add_step(
         "keycompute-runtime",
         "AccountStateStore::new",

@@ -31,7 +31,7 @@ fn test_gateway_config() {
     );
 
     // 2. 构建器模式
-    let builder = GatewayBuilder::new();
+    let _builder = GatewayBuilder::new();
     chain.add_step(
         "llm-gateway",
         "GatewayBuilder::new",

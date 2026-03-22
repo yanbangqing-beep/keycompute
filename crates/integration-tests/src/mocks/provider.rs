@@ -68,7 +68,7 @@ impl ProviderAdapter for MockProvider {
     }
 
     async fn stream_chat(&self, _request: UpstreamRequest) -> keycompute_types::Result<StreamBox> {
-        use std::pin::Pin;
+        
         if self.should_fail {
             return Err(KeyComputeError::ProviderError("Mock failure".to_string()));
         }

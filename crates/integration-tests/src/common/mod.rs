@@ -1,6 +1,5 @@
 //! 测试公共工具和辅助函数
 
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;

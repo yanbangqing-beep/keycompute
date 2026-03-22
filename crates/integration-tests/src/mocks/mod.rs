@@ -2,7 +2,6 @@
 //!
 //! 提供各 crate 的 mock 实现，用于隔离测试
 
-use std::sync::Arc;
 use uuid::Uuid;
 
 /// 模拟 Provider Adapter

@@ -3,7 +3,7 @@
 //! 验证可观测性：日志、指标、追踪
 
 use integration_tests::common::VerificationChain;
-use keycompute_observability::metrics::{MetricsCollector, REQUEST_TOTAL, TOKENS_TOTAL, INPUT_TOKENS_TOTAL, OUTPUT_TOKENS_TOTAL, ACTIVE_REQUESTS};
+use keycompute_observability::metrics::{MetricsCollector, REQUEST_TOTAL, TOKENS_TOTAL, INPUT_TOKENS_TOTAL, ACTIVE_REQUESTS};
 
 /// 测试指标采集
 #[test]

@@ -11,9 +11,8 @@ use axum::{
     extract::{Query, State},
     Json,
 };
-use keycompute_types::{ExecutionPlan, PricingSnapshot, RequestContext, UsageAccumulator};
+use keycompute_types::{RequestContext, UsageAccumulator};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use uuid::Uuid;
 
 /// 路由调试请求

@@ -3,11 +3,8 @@
 //! 验证各 Provider 适配器的协议转换和流处理
 
 use integration_tests::common::VerificationChain;
-use keycompute_provider_trait::{ProviderAdapter, UpstreamRequest, StreamEvent, UpstreamMessage};
+use keycompute_provider_trait::{ProviderAdapter, UpstreamRequest, StreamEvent};
 use keycompute_openai::OpenAIProvider;
-use keycompute_openai::protocol::OpenAIRequest;
-use std::sync::Arc;
-use futures::StreamExt;
 
 /// 测试 Provider trait 基础功能
 #[test]

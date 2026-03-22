@@ -311,7 +311,7 @@ fn create_mock_stream_with_routing(
 fn create_gateway_stream(
     mut rx: tokio::sync::mpsc::Receiver<keycompute_provider_trait::StreamEvent>,
 ) -> impl Stream<Item = std::result::Result<Event, Infallible>> {
-    use futures::stream::{self, StreamExt};
+    use futures::stream::StreamExt;
 
     async_stream::stream! {
         while let Some(event) = rx.recv().await {

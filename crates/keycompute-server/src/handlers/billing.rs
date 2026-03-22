@@ -67,7 +67,7 @@ pub struct BillingRecord {
 pub async fn list_billing_records(
     State(_state): State<AppState>,
     _auth: AuthExtractor,
-    Query(query): Query<ListBillingQuery>,
+    Query(_query): Query<ListBillingQuery>,
 ) -> Result<Json<BillingListResponse>> {
     // TODO: 从数据库查询实际的计费记录
     // 目前返回模拟数据
@@ -142,7 +142,7 @@ pub struct ModelStats {
 pub async fn get_billing_stats(
     State(_state): State<AppState>,
     _auth: AuthExtractor,
-    Query(query): Query<BillingStatsQuery>,
+    Query(_query): Query<BillingStatsQuery>,
 ) -> Result<Json<BillingStatsResponse>> {
     // TODO: 从数据库查询实际的统计数据
     // 目前返回模拟数据
@@ -199,7 +199,7 @@ pub struct TriggerBillingResponse {
 
 /// 手动触发计费（调试用）
 pub async fn trigger_billing(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     _auth: AuthExtractor,
     Json(request): Json<TriggerBillingRequest>,
 ) -> Result<Json<TriggerBillingResponse>> {

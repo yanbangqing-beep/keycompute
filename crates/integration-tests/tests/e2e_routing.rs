@@ -5,7 +5,7 @@
 use integration_tests::common::VerificationChain;
 use keycompute_routing::{RoutingConfig, RoutingEngine};
 use keycompute_runtime::{AccountStateStore, CooldownManager, CooldownReason, ProviderHealthStore};
-use keycompute_types::{ExecutionPlan, PricingSnapshot, RequestContext};
+use keycompute_types::{PricingSnapshot, RequestContext};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 use uuid::Uuid;
