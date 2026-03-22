@@ -13,7 +13,7 @@ use axum::{
     Json,
 };
 use futures::stream::Stream;
-use keycompute_types::{Message, PricingSnapshot, RequestContext, UsageAccumulator};
+use keycompute_types::{Message, RequestContext, UsageAccumulator};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::convert::Infallible;
@@ -118,19 +118,19 @@ pub struct DeltaContent {
 
 /// Chat Completions 处理器
 pub async fn chat_completions(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     auth: AuthExtractor,
     request_id: RequestId,
     Json(request): Json<ChatRequest>,
 ) -> Result<Sse<impl Stream<Item = std::result::Result<Event, Infallible>>>> {
-    // 1. 构建 RequestContext
-    let pricing = PricingSnapshot {
-        model_name: request.model.clone(),
-        currency: "CNY".to_string(),
-        input_price_per_1k: rust_decimal::Decimal::from(1),
-        output_price_per_1k: rust_decimal::Decimal::from(2),
-    };
+    // 1. 构建 PricingSnapshot（请求开始时固化价格）
+    let pricing = state
+        .pricing
+        .create_snapshot(&request.model, &auth.tenant_id)
+        .await
+        .map_err(|e| crate::error::ApiError::Internal(format!("Failed to create pricing snapshot: {}", e)))?;
 
+    // 2. 构建 RequestContext
     let ctx = Arc::new(RequestContext {
         request_id: request_id.0,
         user_id: auth.user_id,
@@ -144,14 +144,14 @@ pub async fn chat_completions(
         started_at: chrono::Utc::now(),
     });
 
-    // TODO: 2. 路由（只读）
+    // TODO: 3. 路由（只读）
     // let plan = state.routing.route(&ctx).await?;
 
-    // TODO: 3. 执行（唯一执行层）
+    // TODO: 4. 执行（唯一执行层）
     // let (tx, rx) = tokio::sync::mpsc::channel(100);
     // ...
 
-    // 4. 返回 SSE 流（简化实现）
+    // 5. 返回 SSE 流（简化实现）
     let stream = create_mock_stream(ctx, request.model);
 
     Ok(Sse::new(stream))

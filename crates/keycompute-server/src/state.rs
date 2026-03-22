@@ -12,8 +12,9 @@ pub struct AppState {
     pub auth: Arc<AuthService>,
     /// 限流服务
     pub rate_limiter: Arc<keycompute_ratelimit::RateLimitService>,
+    /// 定价服务
+    pub pricing: Arc<keycompute_pricing::PricingService>,
     // TODO: 添加其他模块服务
-    // pub pricing: Arc<keycompute_pricing::PricingService>,
     // pub routing: Arc<keycompute_routing::RoutingEngine>,
     // pub runtime: Arc<keycompute_runtime::RuntimeManager>,
     // pub gateway: Arc<llm_gateway::GatewayExecutor>,
@@ -27,9 +28,13 @@ impl AppState {
         let api_key_validator = ApiKeyValidator::new("default-secret");
         let auth_service = AuthService::new(api_key_validator);
 
+        // 创建定价服务
+        let pricing_service = keycompute_pricing::PricingService::new();
+
         Self {
             auth: Arc::new(auth_service),
             rate_limiter: Arc::new(keycompute_ratelimit::RateLimitService::default_memory()),
+            pricing: Arc::new(pricing_service),
         }
     }
 }
