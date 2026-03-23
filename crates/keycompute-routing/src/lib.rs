@@ -93,6 +93,7 @@ impl RoutingEngine {
             providers: vec![
                 "openai".to_string(),
                 "deepseek".to_string(),
+                "vllm".to_string(),
                 "claude".to_string(),
             ],
             config: RoutingConfig::default(),
@@ -114,6 +115,7 @@ impl RoutingEngine {
             providers: vec![
                 "openai".to_string(),
                 "deepseek".to_string(),
+                "vllm".to_string(),
                 "claude".to_string(),
             ],
             config: RoutingConfig::default(),
@@ -135,6 +137,7 @@ impl RoutingEngine {
             providers: vec![
                 "openai".to_string(),
                 "deepseek".to_string(),
+                "vllm".to_string(),
                 "claude".to_string(),
             ],
             config,
@@ -157,6 +160,7 @@ impl RoutingEngine {
             providers: vec![
                 "openai".to_string(),
                 "deepseek".to_string(),
+                "vllm".to_string(),
                 "claude".to_string(),
             ],
             config,
@@ -637,7 +641,7 @@ mod tests {
     async fn test_routing_engine_new() {
         let engine = create_test_engine();
 
-        assert_eq!(engine.configured_providers().len(), 3);
+        assert_eq!(engine.configured_providers().len(), 4);
     }
 
     #[tokio::test]

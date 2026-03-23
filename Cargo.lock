@@ -3337,6 +3337,7 @@ dependencies = [
  "keycompute-routing",
  "keycompute-runtime",
  "keycompute-types",
+ "keycompute-vllm",
  "llm-gateway",
  "reqwest",
  "rust_decimal",
@@ -3367,6 +3368,19 @@ dependencies = [
 [[package]]
 name = "keycompute-vllm"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "keycompute-openai",
+ "keycompute-provider-trait",
+ "keycompute-types",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "keycompute-wechatpay"

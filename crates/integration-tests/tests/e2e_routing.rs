@@ -50,7 +50,7 @@ async fn test_routing_dual_layer_flow() {
         "keycompute-routing",
         "RoutingEngine::new",
         format!("Configured providers: {:?}", engine.configured_providers()),
-        engine.configured_providers().len() == 3,
+        engine.configured_providers().len() == 4,
     );
 
     // 2. 创建请求上下文
@@ -402,7 +402,7 @@ fn test_routing_provider_management() {
         "keycompute-routing",
         "RoutingEngine::initial_providers",
         format!("Initial provider count: {}", initial_count),
-        initial_count == 3,
+        initial_count == 4,
     );
 
     // 2. 添加 Provider

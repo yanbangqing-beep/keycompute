@@ -81,6 +81,7 @@ impl AppState {
             GatewayBuilder::new()
                 .add_provider("openai", Arc::new(keycompute_openai::OpenAIProvider::new()))
                 .add_provider("deepseek", Arc::new(keycompute_deepseek::DeepSeekProvider::new()))
+                .add_provider("vllm", Arc::new(keycompute_vllm::VllmProvider::new()))
                 .build(),
         );
 
@@ -128,6 +129,7 @@ impl AppState {
             GatewayBuilder::new()
                 .add_provider("openai", Arc::new(keycompute_openai::OpenAIProvider::new()))
                 .add_provider("deepseek", Arc::new(keycompute_deepseek::DeepSeekProvider::new()))
+                .add_provider("vllm", Arc::new(keycompute_vllm::VllmProvider::new()))
                 .build(),
         );
 
