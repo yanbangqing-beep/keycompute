@@ -36,6 +36,10 @@ tokio-stream = "0.1"
 async-trait = "0.1"
 async-stream = "0.3"
 
+[features]
+default = []
+redis = ["keycompute-ratelimit/redis", "keycompute-runtime/redis"]
+
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }

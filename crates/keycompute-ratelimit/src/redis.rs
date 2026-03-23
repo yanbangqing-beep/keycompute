@@ -200,18 +200,28 @@ impl RedisRateLimiter {
 
     /// 清理所有限流数据（用于测试或重置）
     pub async fn flush_all(&self) -> Result<()> {
-        let mut conn = self.get_conn().await?;
-
         // 使用 SCAN 查找并删除所有限流相关的 key
         let pattern = format!("{}:*", self.key_prefix);
-        let mut iter: redis::AsyncIter<String> = conn
-            .scan_match(&pattern)
-            .await
-            .map_err(|e| KeyComputeError::Internal(format!("Redis error: {}", e)))?;
+        
+        // 收集所有匹配的 key
+        let mut keys = Vec::new();
+        {
+            let mut conn = self.get_conn().await?;
+            let mut iter: redis::AsyncIter<String> = conn
+                .scan_match(&pattern)
+                .await
+                .map_err(|e| KeyComputeError::Internal(format!("Redis error: {}", e)))?;
+            
+            while let Some(key) = iter.next_item().await {
+                keys.push(key);
+            }
+        }
 
-        while let Some(key) = iter.next_item().await {
+        // 批量删除 key
+        if !keys.is_empty() {
+            let mut conn = self.get_conn().await?;
             let _: () = conn
-                .del(&key)
+                .del(&keys)
                 .await
                 .map_err(|e| KeyComputeError::Internal(format!("Redis error: {}", e)))?;
         }

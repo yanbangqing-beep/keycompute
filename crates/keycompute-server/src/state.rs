@@ -12,6 +12,39 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// 限流后端配置
+#[derive(Debug, Clone)]
+pub enum RateLimitBackendConfig {
+    /// 内存后端
+    Memory,
+    /// Redis 后端
+    Redis { url: String },
+}
+
+impl Default for RateLimitBackendConfig {
+    fn default() -> Self {
+        Self::Memory
+    }
+}
+
+/// 应用状态配置
+#[derive(Debug, Clone)]
+pub struct AppStateConfig {
+    /// 限流后端配置
+    pub rate_limit: RateLimitBackendConfig,
+    /// API Key 验证密钥
+    pub api_key_secret: String,
+}
+
+impl Default for AppStateConfig {
+    fn default() -> Self {
+        Self {
+            rate_limit: RateLimitBackendConfig::default(),
+            api_key_secret: "default-secret".to_string(),
+        }
+    }
+}
+
 /// 应用状态
 #[derive(Clone)]
 pub struct AppState {
@@ -58,10 +91,15 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
-    /// 创建新的应用状态（无数据库连接）
+    /// 创建新的应用状态（无数据库连接，使用默认配置）
     pub fn new() -> Self {
+        Self::with_config(AppStateConfig::default())
+    }
+
+    /// 创建带配置的应用状态（无数据库连接）
+    pub fn with_config(config: AppStateConfig) -> Self {
         // 创建 API Key 验证器
-        let api_key_validator = ApiKeyValidator::new("default-secret");
+        let api_key_validator = ApiKeyValidator::new(&config.api_key_secret);
         let auth_service = AuthService::new(api_key_validator);
 
         // 创建定价服务
@@ -98,10 +136,13 @@ impl AppState {
         // 创建计费服务
         let billing = Arc::new(BillingService::new());
 
+        // 根据配置创建限流服务
+        let rate_limiter = Self::create_rate_limiter(&config.rate_limit);
+
         Self {
             pool: None,
             auth: Arc::new(auth_service),
-            rate_limiter: Arc::new(keycompute_ratelimit::RateLimitService::default_memory()),
+            rate_limiter: Arc::new(rate_limiter),
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,
@@ -113,8 +154,32 @@ impl AppState {
         }
     }
 
-    /// 创建带数据库连接的应用状态
+    /// 根据配置创建限流服务
+    fn create_rate_limiter(config: &RateLimitBackendConfig) -> keycompute_ratelimit::RateLimitService {
+        match config {
+            RateLimitBackendConfig::Memory => {
+                keycompute_ratelimit::RateLimitService::default_memory()
+            }
+            #[cfg(feature = "redis")]
+            RateLimitBackendConfig::Redis { url } => {
+                let rate_config = RateLimitConfig::default();
+                keycompute_ratelimit::RateLimitService::new_redis(url, rate_config)
+                    .expect("Failed to create Redis rate limiter")
+            }
+            #[cfg(not(feature = "redis"))]
+            RateLimitBackendConfig::Redis { .. } => {
+                panic!("Redis backend requested but redis feature is not enabled")
+            }
+        }
+    }
+
+    /// 创建带数据库连接的应用状态（使用默认配置）
     pub fn with_pool(pool: Arc<PgPool>) -> Self {
+        Self::with_pool_and_config(pool, AppStateConfig::default())
+    }
+
+    /// 创建带数据库连接和自定义配置的应用状态
+    pub fn with_pool_and_config(pool: Arc<PgPool>, config: AppStateConfig) -> Self {
         // 创建带数据库连接的 API Key 验证器
         let api_key_validator = ApiKeyValidator::with_pool(Arc::clone(&pool));
         let auth_service = AuthService::new(api_key_validator);
@@ -154,10 +219,13 @@ impl AppState {
         // 创建带数据库连接的计费服务
         let billing = Arc::new(BillingService::with_pool(Arc::clone(&pool)));
 
+        // 根据配置创建限流服务
+        let rate_limiter = Self::create_rate_limiter(&config.rate_limit);
+
         Self {
             pool: Some(pool),
             auth: Arc::new(auth_service),
-            rate_limiter: Arc::new(keycompute_ratelimit::RateLimitService::default_memory()),
+            rate_limiter: Arc::new(rate_limiter),
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,
@@ -169,10 +237,18 @@ impl AppState {
         }
     }
 
-    /// 创建用于测试的应用状态，使用自定义 Provider
+    /// 创建用于测试的应用状态，使用自定义 Provider（默认配置）
     pub fn with_providers(providers: HashMap<String, Arc<dyn ProviderAdapter>>) -> Self {
+        Self::with_providers_and_config(providers, AppStateConfig::default())
+    }
+
+    /// 创建用于测试的应用状态，使用自定义 Provider和配置
+    pub fn with_providers_and_config(
+        providers: HashMap<String, Arc<dyn ProviderAdapter>>,
+        config: AppStateConfig,
+    ) -> Self {
         // 创建 API Key 验证器
-        let api_key_validator = ApiKeyValidator::new("default-secret");
+        let api_key_validator = ApiKeyValidator::new(&config.api_key_secret);
         let auth_service = AuthService::new(api_key_validator);
 
         // 创建定价服务
@@ -203,10 +279,13 @@ impl AppState {
         // 创建计费服务
         let billing = Arc::new(BillingService::new());
 
+        // 根据配置创建限流服务
+        let rate_limiter = Self::create_rate_limiter(&config.rate_limit);
+
         Self {
             pool: None,
             auth: Arc::new(auth_service),
-            rate_limiter: Arc::new(keycompute_ratelimit::RateLimitService::default_memory()),
+            rate_limiter: Arc::new(rate_limiter),
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,

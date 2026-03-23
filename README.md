@@ -51,6 +51,17 @@ cargo clippy --workspace
 cargo fmt --check
 ```
 
+### Redis 后端（可选）
+
+默认使用内存后端。如需分布式限流和状态共享，可启用 Redis：
+
+```bash
+# 启用 Redis 后端能力
+cargo build -p keycompute-server --features redis
+```
+
+启用后通过 `AppStateConfig` 配置选择后端（见 `keycompute-server/src/state.rs`）。
+
 ## 实现阶段
 
 | 阶段 | 模块 | 状态 |
@@ -63,7 +74,7 @@ cargo fmt --check
 | P5 | llm-gateway | ✅ |
 | P6 | Billing, Distribution | ✅ |
 | P7 | keycompute-server | ✅ |
-| P8 | 其他 Provider | ⏳ |
+| P8 | 其他 Provider | ✅ |
 | P9 | 前端 | ⏳ |
 
 ## License

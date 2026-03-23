@@ -94,7 +94,7 @@ impl RuntimeStore for RedisRuntimeStore {
 
         Box::pin(async move {
             if let Ok(mut conn) = client.get_multiplexed_tokio_connection().await {
-                let _: Result<(), _> = conn.set_ex(&key, value, ttl.as_secs() as i64).await;
+                let _: Result<(), _> = conn.set_ex(&key, value, ttl.as_secs()).await;
             }
         })
     }
@@ -168,7 +168,7 @@ impl RedisRuntimeStore {
         if let Ok(mut conn) = self.get_conn().await {
             for (key, value) in kvs {
                 let full_key = self.build_key(key);
-                let _: Result<(), _> = conn.set_ex(&full_key, *value, ttl.as_secs() as i64).await;
+                let _: Result<(), _> = conn.set_ex(&full_key, *value, ttl.as_secs()).await;
             }
         }
     }
@@ -191,13 +191,22 @@ impl RedisRuntimeStore {
 
     /// 清理所有以当前前缀开头的键
     pub async fn flush_prefix(&self) -> Result<(), redis::RedisError> {
-        let mut conn = self.get_conn().await?;
         let pattern = format!("{}:*", self.key_prefix);
 
-        let mut iter: redis::AsyncIter<String> = conn.scan_match(&pattern).await?;
+        // 收集所有匹配的 key
+        let mut keys = Vec::new();
+        {
+            let mut conn = self.get_conn().await?;
+            let mut iter: redis::AsyncIter<String> = conn.scan_match(&pattern).await?;
+            while let Some(key) = iter.next_item().await {
+                keys.push(key);
+            }
+        }
 
-        while let Some(key) = iter.next_item().await {
-            let _: () = conn.del(&key).await?;
+        // 批量删除 key
+        if !keys.is_empty() {
+            let mut conn = self.get_conn().await?;
+            let _: () = conn.del(&keys).await?;
         }
 
         Ok(())
