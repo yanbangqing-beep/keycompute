@@ -13,7 +13,7 @@ pub mod user;
 
 // 重新导出常用模型
 pub use account::{Account, CreateAccountRequest, UpdateAccountRequest};
-pub use api_key::{ApiKey, ApiKeyResponse, CreateApiKeyRequest};
+pub use api_key::{CreateProduceAiKeyRequest, ProduceAiKey, ProduceAiKeyResponse};
 pub use distribution_record::{
     CreateDistributionRecordRequest, DistributionRecord, DistributionStats,
 };

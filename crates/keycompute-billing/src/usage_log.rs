@@ -90,7 +90,7 @@ impl BillingService {
             request_id: ctx.request_id,
             tenant_id: ctx.tenant_id,
             user_id: ctx.user_id,
-            api_key_id: ctx.api_key_id,
+            produce_ai_key_id: ctx.produce_ai_key_id,
             model_name: ctx.model.clone(),
             provider_name: provider_name.to_string(),
             account_id,
@@ -140,7 +140,7 @@ impl BillingService {
                 request_id: new_log.request_id,
                 tenant_id: new_log.tenant_id,
                 user_id: new_log.user_id,
-                api_key_id: new_log.api_key_id,
+                produce_ai_key_id: new_log.produce_ai_key_id,
                 model_name: new_log.model_name,
                 provider_name: new_log.provider_name,
                 account_id: new_log.account_id,
@@ -167,7 +167,7 @@ impl BillingService {
             request_id: new_log.request_id,
             tenant_id: new_log.tenant_id,
             user_id: new_log.user_id,
-            api_key_id: new_log.api_key_id,
+            produce_ai_key_id: new_log.produce_ai_key_id,
             model_name: new_log.model_name,
             provider_name: new_log.provider_name,
             account_id: new_log.account_id,
@@ -289,8 +289,8 @@ pub struct NewUsageLog {
     pub tenant_id: Uuid,
     /// 用户 ID
     pub user_id: Uuid,
-    /// API Key ID
-    pub api_key_id: Uuid,
+    /// Produce AI Key ID（用户访问系统的 API Key）
+    pub produce_ai_key_id: Uuid,
     /// 模型名称
     pub model_name: String,
     /// Provider 名称
@@ -334,7 +334,7 @@ pub struct NewUsageLogBuilder {
     request_id: Uuid,
     tenant_id: Option<Uuid>,
     user_id: Option<Uuid>,
-    api_key_id: Option<Uuid>,
+    produce_ai_key_id: Option<Uuid>,
     model_name: Option<String>,
     provider_name: Option<String>,
     account_id: Option<Uuid>,
@@ -357,7 +357,7 @@ impl NewUsageLogBuilder {
             request_id,
             tenant_id: None,
             user_id: None,
-            api_key_id: None,
+            produce_ai_key_id: None,
             model_name: None,
             provider_name: None,
             account_id: None,
@@ -386,9 +386,9 @@ impl NewUsageLogBuilder {
         self
     }
 
-    /// 设置 API Key ID
-    pub fn api_key_id(mut self, id: Uuid) -> Self {
-        self.api_key_id = Some(id);
+    /// 设置 Produce AI Key ID
+    pub fn produce_ai_key_id(mut self, id: Uuid) -> Self {
+        self.produce_ai_key_id = Some(id);
         self
     }
 
@@ -471,9 +471,9 @@ impl NewUsageLogBuilder {
             user_id: self
                 .user_id
                 .ok_or_else(|| KeyComputeError::Internal("user_id required".into()))?,
-            api_key_id: self
-                .api_key_id
-                .ok_or_else(|| KeyComputeError::Internal("api_key_id required".into()))?,
+            produce_ai_key_id: self
+                .produce_ai_key_id
+                .ok_or_else(|| KeyComputeError::Internal("produce_ai_key_id required".into()))?,
             model_name: self
                 .model_name
                 .ok_or_else(|| KeyComputeError::Internal("model_name required".into()))?,
@@ -516,7 +516,7 @@ mod tests {
         let log = NewUsageLog::builder(request_id)
             .tenant_id(tenant_id)
             .user_id(user_id)
-            .api_key_id(api_key_id)
+            .produce_ai_key_id(api_key_id)
             .model_name("gpt-4o")
             .provider_name("openai")
             .account_id(account_id)
@@ -547,7 +547,7 @@ mod tests {
         let log = NewUsageLog::builder(request_id)
             .tenant_id(tenant_id)
             .user_id(user_id)
-            .api_key_id(api_key_id)
+            .produce_ai_key_id(api_key_id)
             .model_name("gpt-4o")
             .provider_name("openai")
             .account_id(account_id)

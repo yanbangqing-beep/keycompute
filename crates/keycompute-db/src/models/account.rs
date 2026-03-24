@@ -11,8 +11,8 @@ pub struct Account {
     pub provider: String,
     pub name: String,
     pub endpoint: String,
-    pub api_key_encrypted: String,
-    pub api_key_preview: String,
+    pub upstream_api_key_encrypted: String,
+    pub upstream_api_key_preview: String,
     pub rpm_limit: i32,
     pub tpm_limit: i32,
     pub priority: i32,
@@ -29,8 +29,8 @@ pub struct CreateAccountRequest {
     pub provider: String,
     pub name: String,
     pub endpoint: String,
-    pub api_key_encrypted: String,
-    pub api_key_preview: String,
+    pub upstream_api_key_encrypted: String,
+    pub upstream_api_key_preview: String,
     pub rpm_limit: Option<i32>,
     pub tpm_limit: Option<i32>,
     pub priority: Option<i32>,
@@ -42,8 +42,8 @@ pub struct CreateAccountRequest {
 pub struct UpdateAccountRequest {
     pub name: Option<String>,
     pub endpoint: Option<String>,
-    pub api_key_encrypted: Option<String>,
-    pub api_key_preview: Option<String>,
+    pub upstream_api_key_encrypted: Option<String>,
+    pub upstream_api_key_preview: Option<String>,
     pub rpm_limit: Option<i32>,
     pub tpm_limit: Option<i32>,
     pub priority: Option<i32>,
@@ -61,7 +61,7 @@ impl Account {
             r#"
             INSERT INTO accounts (
                 tenant_id, provider, name, endpoint,
-                api_key_encrypted, api_key_preview,
+                upstream_api_key_encrypted, upstream_api_key_preview,
                 rpm_limit, tpm_limit, priority, models_supported
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -72,8 +72,8 @@ impl Account {
         .bind(&req.provider)
         .bind(&req.name)
         .bind(&req.endpoint)
-        .bind(&req.api_key_encrypted)
-        .bind(&req.api_key_preview)
+        .bind(&req.upstream_api_key_encrypted)
+        .bind(&req.upstream_api_key_preview)
         .bind(req.rpm_limit.unwrap_or(60))
         .bind(req.tpm_limit.unwrap_or(100000))
         .bind(req.priority.unwrap_or(0))
@@ -158,8 +158,8 @@ impl Account {
             UPDATE accounts
             SET name = COALESCE($1, name),
                 endpoint = COALESCE($2, endpoint),
-                api_key_encrypted = COALESCE($3, api_key_encrypted),
-                api_key_preview = COALESCE($4, api_key_preview),
+                upstream_api_key_encrypted = COALESCE($3, upstream_api_key_encrypted),
+                upstream_api_key_preview = COALESCE($4, upstream_api_key_preview),
                 rpm_limit = COALESCE($5, rpm_limit),
                 tpm_limit = COALESCE($6, tpm_limit),
                 priority = COALESCE($7, priority),
@@ -172,8 +172,8 @@ impl Account {
         )
         .bind(&req.name)
         .bind(&req.endpoint)
-        .bind(&req.api_key_encrypted)
-        .bind(&req.api_key_preview)
+        .bind(&req.upstream_api_key_encrypted)
+        .bind(&req.upstream_api_key_preview)
         .bind(req.rpm_limit)
         .bind(req.tpm_limit)
         .bind(req.priority)

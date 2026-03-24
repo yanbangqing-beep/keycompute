@@ -4,7 +4,7 @@ CREATE TABLE usage_logs (
     request_id UUID NOT NULL UNIQUE,
     tenant_id UUID NOT NULL,
     user_id UUID NOT NULL,
-    api_key_id UUID NOT NULL,
+    produce_ai_key_id UUID NOT NULL,
     model_name VARCHAR(100) NOT NULL,
     provider_name VARCHAR(50) NOT NULL,
     account_id UUID NOT NULL,
@@ -24,6 +24,6 @@ CREATE TABLE usage_logs (
 
 CREATE INDEX idx_usage_logs_tenant ON usage_logs(tenant_id);
 CREATE INDEX idx_usage_logs_user ON usage_logs(user_id);
-CREATE INDEX idx_usage_logs_api_key ON usage_logs(api_key_id);
+CREATE INDEX idx_usage_logs_produce_ai_key ON usage_logs(produce_ai_key_id);
 CREATE INDEX idx_usage_logs_created ON usage_logs(created_at);
 CREATE INDEX idx_usage_logs_request ON usage_logs(request_id);

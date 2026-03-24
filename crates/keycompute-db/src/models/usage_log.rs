@@ -11,7 +11,7 @@ pub struct UsageLog {
     pub request_id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
-    pub api_key_id: Uuid,
+    pub produce_ai_key_id: Uuid,
     pub model_name: String,
     pub provider_name: String,
     pub account_id: Uuid,
@@ -35,7 +35,7 @@ pub struct CreateUsageLogRequest {
     pub request_id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
-    pub api_key_id: Uuid,
+    pub produce_ai_key_id: Uuid,
     pub model_name: String,
     pub provider_name: String,
     pub account_id: Uuid,
@@ -70,7 +70,7 @@ impl UsageLog {
         let log = sqlx::query_as::<_, UsageLog>(
             r#"
             INSERT INTO usage_logs (
-                request_id, tenant_id, user_id, api_key_id,
+                request_id, tenant_id, user_id, produce_ai_key_id,
                 model_name, provider_name, account_id,
                 input_tokens, output_tokens, total_tokens,
                 input_unit_price_snapshot, output_unit_price_snapshot,
@@ -87,7 +87,7 @@ impl UsageLog {
         .bind(&req.request_id)
         .bind(&req.tenant_id)
         .bind(&req.user_id)
-        .bind(&req.api_key_id)
+        .bind(&req.produce_ai_key_id)
         .bind(&req.model_name)
         .bind(&req.provider_name)
         .bind(&req.account_id)

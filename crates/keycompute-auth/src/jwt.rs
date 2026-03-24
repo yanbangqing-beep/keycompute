@@ -160,7 +160,7 @@ impl JwtValidator {
         Ok(AuthContext {
             user_id,
             tenant_id,
-            api_key_id: Uuid::nil(), // JWT 认证没有 API Key ID
+            produce_ai_key_id: Uuid::nil(), // JWT 认证没有 Produce AI Key ID
             role: claims.role,
             permissions,
             user_info: None,

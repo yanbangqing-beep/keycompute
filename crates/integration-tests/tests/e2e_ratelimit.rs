@@ -99,11 +99,11 @@ fn test_ratelimit_key_dimensions() {
     // 1. 测试不同维度的限流键
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
-    let api_key_id = Uuid::new_v4();
+    let produce_ai_key_id = Uuid::new_v4();
 
-    let key1 = RateLimitKey::new(tenant_id, user_id, api_key_id);
-    let key2 = RateLimitKey::new(tenant_id, user_id, api_key_id);
-    let key3 = RateLimitKey::new(tenant_id, Uuid::new_v4(), api_key_id);
+    let key1 = RateLimitKey::new(tenant_id, user_id, produce_ai_key_id);
+    let key2 = RateLimitKey::new(tenant_id, user_id, produce_ai_key_id);
+    let key3 = RateLimitKey::new(tenant_id, Uuid::new_v4(), produce_ai_key_id);
 
     chain.add_step(
         "keycompute-ratelimit",

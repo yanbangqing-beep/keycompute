@@ -25,19 +25,24 @@ pub struct AuthExtractor {
     pub user_id: Uuid,
     /// 租户 ID
     pub tenant_id: Uuid,
-    /// API Key ID
-    pub api_key_id: Uuid,
+    /// Produce AI Key ID
+    pub produce_ai_key_id: Uuid,
     /// 用户角色
     pub role: String,
 }
 
 impl AuthExtractor {
     /// 创建新的认证提取器（用于测试）
-    pub fn new(user_id: Uuid, tenant_id: Uuid, api_key_id: Uuid, role: impl Into<String>) -> Self {
+    pub fn new(
+        user_id: Uuid,
+        tenant_id: Uuid,
+        produce_ai_key_id: Uuid,
+        role: impl Into<String>,
+    ) -> Self {
         Self {
             user_id,
             tenant_id,
-            api_key_id,
+            produce_ai_key_id,
             role: role.into(),
         }
     }
@@ -71,7 +76,7 @@ impl AuthExtractor {
         Self {
             user_id: ctx.user_id,
             tenant_id: ctx.tenant_id,
-            api_key_id: ctx.api_key_id,
+            produce_ai_key_id: ctx.produce_ai_key_id,
             role: ctx.role,
         }
     }
@@ -145,14 +150,14 @@ mod tests {
     #[tokio::test]
     async fn test_auth_extractor_from_header_valid() {
         let mut headers = HeaderMap::new();
-        let api_key = keycompute_auth::ApiKeyValidator::generate_key();
+        let api_key = keycompute_auth::ProduceAiKeyValidator::generate_key();
         headers.insert(
             "Authorization",
             HeaderValue::from_str(&format!("Bearer {}", api_key)).unwrap(),
         );
 
         let auth_service =
-            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+            keycompute_auth::AuthService::new(keycompute_auth::ProduceAiKeyValidator::default());
         let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(result.is_ok());
     }
@@ -161,7 +166,7 @@ mod tests {
     async fn test_auth_extractor_from_header_missing() {
         let headers = HeaderMap::new();
         let auth_service =
-            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+            keycompute_auth::AuthService::new(keycompute_auth::ProduceAiKeyValidator::default());
         let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(matches!(result, Err(ApiError::Auth(_))));
     }
@@ -175,7 +180,7 @@ mod tests {
         );
 
         let auth_service =
-            keycompute_auth::AuthService::new(keycompute_auth::ApiKeyValidator::default());
+            keycompute_auth::AuthService::new(keycompute_auth::ProduceAiKeyValidator::default());
         let result = AuthExtractor::from_header_with_auth(&headers, &auth_service).await;
         assert!(matches!(result, Err(ApiError::Auth(_))));
     }

@@ -302,7 +302,7 @@ async fn test_billing_triggers_distribution() {
     let request_id = uuid::Uuid::new_v4();
     let tenant_id = uuid::Uuid::new_v4();
     let user_id = uuid::Uuid::new_v4();
-    let api_key_id = uuid::Uuid::new_v4();
+    let produce_ai_key_id = uuid::Uuid::new_v4();
 
     let pricing = PricingSnapshot {
         model_name: "gpt-4o".to_string(),
@@ -315,7 +315,7 @@ async fn test_billing_triggers_distribution() {
         request_id,
         user_id,
         tenant_id,
-        api_key_id,
+        produce_ai_key_id,
         model: "gpt-4o".to_string(),
         messages: vec![keycompute_types::Message {
             role: "user".to_string(),

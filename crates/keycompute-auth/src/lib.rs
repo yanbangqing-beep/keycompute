@@ -1,13 +1,13 @@
 //! Auth & User Module
 //!
-//! API Key / JWT 解析，User / Tenant 加载。
+//! Produce AI Key / JWT 解析，User / Tenant 加载。
 
 pub mod api_key;
 pub mod jwt;
 pub mod permission;
 pub mod user;
 
-pub use api_key::{ApiKeyAuth, ApiKeyValidator};
+pub use api_key::{ProduceAiKeyAuth, ProduceAiKeyValidator};
 pub use jwt::{JwtClaims, JwtValidator};
 pub use permission::{Permission, PermissionChecker};
 pub use user::{TenantConfig, TenantInfo, UserInfo, UserService};
@@ -26,8 +26,8 @@ pub struct AuthContext {
     pub user_id: Uuid,
     /// 租户 ID
     pub tenant_id: Uuid,
-    /// API Key ID
-    pub api_key_id: Uuid,
+    /// Produce AI Key ID（用户访问系统的 API Key）
+    pub produce_ai_key_id: Uuid,
     /// 用户角色
     pub role: String,
     /// 权限列表
@@ -40,11 +40,16 @@ pub struct AuthContext {
 
 impl AuthContext {
     /// 创建新的认证上下文
-    pub fn new(user_id: Uuid, tenant_id: Uuid, api_key_id: Uuid, role: impl Into<String>) -> Self {
+    pub fn new(
+        user_id: Uuid,
+        tenant_id: Uuid,
+        produce_ai_key_id: Uuid,
+        role: impl Into<String>,
+    ) -> Self {
         Self {
             user_id,
             tenant_id,
-            api_key_id,
+            produce_ai_key_id,
             role: role.into(),
             permissions: Vec::new(),
             user_info: None,
@@ -98,11 +103,11 @@ impl AuthContext {
 
 /// 认证服务
 ///
-/// 统一处理 API Key 和 JWT 认证
+/// 统一处理 Produce AI Key 和 JWT 认证
 #[derive(Clone)]
 pub struct AuthService {
-    /// API Key 验证器
-    api_key_validator: ApiKeyValidator,
+    /// Produce AI Key 验证器
+    produce_ai_key_validator: ProduceAiKeyValidator,
     /// JWT 验证器
     jwt_validator: Option<JwtValidator>,
     /// 用户服务
@@ -112,7 +117,7 @@ pub struct AuthService {
 impl std::fmt::Debug for AuthService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuthService")
-            .field("api_key_validator", &self.api_key_validator)
+            .field("produce_ai_key_validator", &self.produce_ai_key_validator)
             .field("jwt_validator", &self.jwt_validator)
             .field("user_service", &self.user_service)
             .finish()
@@ -120,10 +125,10 @@ impl std::fmt::Debug for AuthService {
 }
 
 impl AuthService {
-    /// 创建只使用 API Key 认证的 AuthService
-    pub fn new(api_key_validator: ApiKeyValidator) -> Self {
+    /// 创建只使用 Produce AI Key 认证的 AuthService
+    pub fn new(produce_ai_key_validator: ProduceAiKeyValidator) -> Self {
         Self {
-            api_key_validator,
+            produce_ai_key_validator,
             jwt_validator: None,
             user_service: None,
         }
@@ -143,11 +148,11 @@ impl AuthService {
 
     /// 创建完整的 AuthService（带数据库连接）
     pub fn with_pool(pool: Arc<PgPool>) -> Self {
-        let api_key_validator = ApiKeyValidator::with_pool(Arc::clone(&pool));
+        let produce_ai_key_validator = ProduceAiKeyValidator::with_pool(Arc::clone(&pool));
         let user_service = UserService::with_pool(Arc::clone(&pool));
 
         Self {
-            api_key_validator,
+            produce_ai_key_validator,
             jwt_validator: None,
             user_service: Some(user_service),
         }
@@ -158,9 +163,9 @@ impl AuthService {
         self.jwt_validator = Some(jwt_validator);
     }
 
-    /// 验证 API Key
+    /// 验证 Produce AI Key
     pub async fn verify_api_key(&self, key: &str) -> Result<AuthContext> {
-        self.api_key_validator.validate(key).await
+        self.produce_ai_key_validator.validate(key).await
     }
 
     /// 验证 JWT Token（如果配置了 JWT）
@@ -173,9 +178,9 @@ impl AuthService {
         }
     }
 
-    /// 验证 Token（自动检测是 API Key 还是 JWT）
+    /// 验证 Token（自动检测是 Produce AI Key 还是 JWT）
     pub async fn verify_token(&self, token: &str) -> Result<AuthContext> {
-        // API Key 格式: sk-xxxx
+        // Produce AI Key 格式: sk-xxxx
         if token.starts_with("sk-") {
             return self.verify_api_key(token).await;
         }
@@ -286,16 +291,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_service_verify_api_key() {
-        let auth_service = AuthService::new(ApiKeyValidator::default());
-        let key = ApiKeyValidator::generate_key();
+        let auth_service = AuthService::new(ProduceAiKeyValidator::default());
+        let key = ProduceAiKeyValidator::generate_key();
         let result = auth_service.verify_api_key(&key).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_auth_service_verify_token_api_key() {
-        let auth_service = AuthService::new(ApiKeyValidator::default());
-        let key = ApiKeyValidator::generate_key();
+        let auth_service = AuthService::new(ProduceAiKeyValidator::default());
+        let key = ProduceAiKeyValidator::generate_key();
         let result = auth_service.verify_token(&key).await;
         assert!(result.is_ok());
     }
@@ -303,7 +308,8 @@ mod tests {
     #[test]
     fn test_auth_service_verify_jwt() {
         let jwt_validator = JwtValidator::new("secret", "keycompute");
-        let auth_service = AuthService::new(ApiKeyValidator::default()).with_jwt(jwt_validator);
+        let auth_service =
+            AuthService::new(ProduceAiKeyValidator::default()).with_jwt(jwt_validator);
 
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();

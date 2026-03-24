@@ -6,7 +6,7 @@
 pub mod tables {
     pub const USERS: &str = "users";
     pub const TENANTS: &str = "tenants";
-    pub const API_KEYS: &str = "api_keys";
+    pub const PRODUCE_AI_KEYS: &str = "produce_ai_keys";
     pub const ACCOUNTS: &str = "accounts";
     pub const PRICING_MODELS: &str = "pricing_models";
     pub const USAGE_LOGS: &str = "usage_logs";
@@ -36,14 +36,14 @@ pub mod tenants {
     pub const UPDATED_AT: &str = "updated_at";
 }
 
-/// api_keys 表列名
-pub mod api_keys {
+/// produce_ai_keys 表列名
+pub mod produce_ai_keys {
     pub const ID: &str = "id";
     pub const TENANT_ID: &str = "tenant_id";
     pub const USER_ID: &str = "user_id";
     pub const NAME: &str = "name";
-    pub const KEY_HASH: &str = "key_hash";
-    pub const KEY_PREVIEW: &str = "key_preview";
+    pub const PRODUCE_AI_KEY_HASH: &str = "produce_ai_key_hash";
+    pub const PRODUCE_AI_KEY_PREVIEW: &str = "produce_ai_key_preview";
     pub const REVOKED: &str = "revoked";
     pub const REVOKED_AT: &str = "revoked_at";
     pub const EXPIRES_AT: &str = "expires_at";
@@ -59,8 +59,8 @@ pub mod accounts {
     pub const PROVIDER: &str = "provider";
     pub const NAME: &str = "name";
     pub const ENDPOINT: &str = "endpoint";
-    pub const API_KEY_ENCRYPTED: &str = "api_key_encrypted";
-    pub const API_KEY_PREVIEW: &str = "api_key_preview";
+    pub const UPSTREAM_API_KEY_ENCRYPTED: &str = "upstream_api_key_encrypted";
+    pub const UPSTREAM_API_KEY_PREVIEW: &str = "upstream_api_key_preview";
     pub const RPM_LIMIT: &str = "rpm_limit";
     pub const TPM_LIMIT: &str = "tpm_limit";
     pub const PRIORITY: &str = "priority";
@@ -92,7 +92,7 @@ pub mod usage_logs {
     pub const REQUEST_ID: &str = "request_id";
     pub const TENANT_ID: &str = "tenant_id";
     pub const USER_ID: &str = "user_id";
-    pub const API_KEY_ID: &str = "api_key_id";
+    pub const PRODUCE_AI_KEY_ID: &str = "produce_ai_key_id";
     pub const MODEL_NAME: &str = "model_name";
     pub const PROVIDER_NAME: &str = "provider_name";
     pub const ACCOUNT_ID: &str = "account_id";

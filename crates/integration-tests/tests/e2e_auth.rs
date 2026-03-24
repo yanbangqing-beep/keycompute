@@ -1,40 +1,42 @@
 //! Auth 模块端到端测试
 //!
-//! 验证认证流程：API Key 验证、JWT 解析、权限检查
+//! 验证认证流程：Produce AI Key 验证、JWT 解析、权限检查
 
 use integration_tests::common::VerificationChain;
 use keycompute_auth::user::TenantInfo;
-use keycompute_auth::{ApiKeyValidator, JwtValidator, Permission, PermissionChecker, UserInfo};
+use keycompute_auth::{
+    JwtValidator, Permission, PermissionChecker, ProduceAiKeyValidator, UserInfo,
+};
 use uuid::Uuid;
 
-/// 测试 API Key 验证流程
+/// 测试 Produce AI Key 验证流程
 #[tokio::test]
-async fn test_auth_api_key_flow() {
+async fn test_auth_produce_ai_key_flow() {
     let mut chain = VerificationChain::new();
 
-    // 1. 创建 API Key 验证器
-    let validator = ApiKeyValidator::new();
+    // 1. 创建 Produce AI Key 验证器
+    let validator = ProduceAiKeyValidator::new();
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::new",
-        "API Key validator created",
+        "ProduceAiKeyValidator::new",
+        "Produce AI Key validator created",
         true,
     );
 
-    // 2. 生成 API Key
-    let key = ApiKeyValidator::generate_key();
+    // 2. 生成 Produce AI Key
+    let key = ProduceAiKeyValidator::generate_key();
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::generate_key",
+        "ProduceAiKeyValidator::generate_key",
         format!("Generated key prefix: {}", &key[..6]),
         key.starts_with("sk-"),
     );
 
-    // 3. 验证 API Key 格式（通过检查前缀）
+    // 3. 验证 Produce AI Key 格式（通过检查前缀）
     let valid_format = key.starts_with("sk-");
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::validate_format",
+        "ProduceAiKeyValidator::validate_format",
         format!("Valid format: {}", valid_format),
         valid_format,
     );
@@ -43,16 +45,16 @@ async fn test_auth_api_key_flow() {
     let invalid_result = validator.validate("invalid-key").await;
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::validate_invalid",
+        "ProduceAiKeyValidator::validate_invalid",
         format!("Invalid format rejected: {}", invalid_result.is_err()),
         invalid_result.is_err(),
     );
 
     // 5. 测试哈希
-    let hash = ApiKeyValidator::hash_key(&key);
+    let hash = ProduceAiKeyValidator::hash_key(&key);
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::hash_key",
+        "ProduceAiKeyValidator::hash_key",
         format!("Hash length: {}", hash.len()),
         hash.len() == 64, // SHA256 hex 长度
     );

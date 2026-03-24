@@ -172,7 +172,7 @@ fn create_test_context() -> RequestContext {
         request_id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         tenant_id: Uuid::new_v4(),
-        api_key_id: Uuid::new_v4(),
+        produce_ai_key_id: Uuid::new_v4(),
         model: "gpt-4o".to_string(),
         messages: vec![],
         stream: true,

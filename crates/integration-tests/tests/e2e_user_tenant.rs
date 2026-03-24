@@ -5,14 +5,14 @@
 //! - AuthService 完整认证流程
 //! - 用户-租户关联验证
 //! - 租户状态检查
-//! - API Key 验证链路
+//! - Produce AI Key 验证链路
 
 use integration_tests::common::VerificationChain;
 use integration_tests::mocks::database::{
-    MockApiKey, MockTenant, MockUser, MockUserTenantDatabase,
+    MockProduceAiKey, MockTenant, MockUser, MockUserTenantDatabase,
 };
 use keycompute_auth::{
-    ApiKeyValidator, AuthService, JwtValidator, Permission,
+    AuthService, JwtValidator, Permission, ProduceAiKeyValidator,
     user::{TenantConfig, TenantInfo, UserInfo, UserService},
 };
 use uuid::Uuid;
@@ -45,13 +45,13 @@ fn test_mock_database_basic_operations() {
         db.get_user(user.id).is_some(),
     );
 
-    // 3. 创建 API Key
-    let (api_key, raw_key) = db.create_test_api_key(user.id, tenant.id);
+    // 3. 创建 Produce AI Key
+    let (produce_ai_key, raw_key) = db.create_test_produce_ai_key(user.id, tenant.id);
     chain.add_step(
         "integration-tests",
-        "MockUserTenantDatabase::create_test_api_key",
-        format!("API Key created: {}", api_key.id),
-        db.get_api_key(api_key.id).is_some() && raw_key.starts_with("sk-test-"),
+        "MockUserTenantDatabase::create_test_produce_ai_key",
+        format!("Produce AI Key created: {}", produce_ai_key.id),
+        db.get_produce_ai_key(produce_ai_key.id).is_some() && raw_key.starts_with("sk-test-"),
     );
 
     // 4. 验证数据统计
@@ -61,9 +61,9 @@ fn test_mock_database_basic_operations() {
         "MockUserTenantDatabase::stats",
         format!(
             "Stats: {} tenants, {} users, {} keys",
-            stats.tenant_count, stats.user_count, stats.api_key_count
+            stats.tenant_count, stats.user_count, stats.produce_ai_key_count
         ),
-        stats.tenant_count == 1 && stats.user_count == 1 && stats.api_key_count == 1,
+        stats.tenant_count == 1 && stats.user_count == 1 && stats.produce_ai_key_count == 1,
     );
 
     chain.print_report();
@@ -109,40 +109,40 @@ fn test_tenant_status_management() {
     assert!(chain.all_passed());
 }
 
-/// 测试 API Key 生命周期
+/// 测试 Produce AI Key 生命周期
 #[test]
-fn test_api_key_lifecycle() {
+fn test_produce_ai_key_lifecycle() {
     let mut chain = VerificationChain::new();
     let db = MockUserTenantDatabase::new();
 
     let tenant = db.create_test_tenant();
     let user = db.create_test_user(tenant.id, "user");
-    let (api_key, _) = db.create_test_api_key(user.id, tenant.id);
+    let (produce_ai_key, _) = db.create_test_produce_ai_key(user.id, tenant.id);
 
     // 1. 初始状态有效
     chain.add_step(
         "integration-tests",
-        "api_key::initial_valid",
-        "API Key initially valid",
-        api_key.is_valid(),
+        "produce_ai_key::initial_valid",
+        "Produce AI Key initially valid",
+        produce_ai_key.is_valid(),
     );
 
     // 2. 撤销后无效
-    db.revoke_api_key(api_key.id);
-    let revoked = db.get_api_key(api_key.id).unwrap();
+    db.revoke_produce_ai_key(produce_ai_key.id);
+    let revoked = db.get_produce_ai_key(produce_ai_key.id).unwrap();
     chain.add_step(
         "integration-tests",
-        "api_key::revoked",
+        "produce_ai_key::revoked",
         format!("Revoked: {}", revoked.revoked),
         !revoked.is_valid(),
     );
 
     // 3. 创建过期 Key
-    let expired_key = MockApiKey::new(user.id, tenant.id, "expired-hash")
+    let expired_key = MockProduceAiKey::new(user.id, tenant.id, "expired-hash")
         .with_expires_at(chrono::Utc::now() - chrono::Duration::hours(1));
     chain.add_step(
         "integration-tests",
-        "api_key::expired",
+        "produce_ai_key::expired",
         "Expired key is invalid",
         !expired_key.is_valid(),
     );
@@ -359,25 +359,25 @@ fn test_jwt_full_flow() {
 // API Key 认证测试
 // ============================================================================
 
-/// 测试 API Key 验证流程（无数据库）
+/// 测试 Produce AI Key 验证流程（无数据库）
 #[tokio::test]
-async fn test_api_key_validation_flow() {
+async fn test_produce_ai_key_validation_flow() {
     let mut chain = VerificationChain::new();
 
     // 1. 创建验证器（无数据库）
-    let validator = ApiKeyValidator::new();
+    let validator = ProduceAiKeyValidator::new();
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::new",
-        "API Key validator created",
+        "ProduceAiKeyValidator::new",
+        "Produce AI Key validator created",
         true,
     );
 
     // 2. 生成 Key
-    let key = ApiKeyValidator::generate_key();
+    let key = ProduceAiKeyValidator::generate_key();
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::generate_key",
+        "ProduceAiKeyValidator::generate_key",
         format!("Key prefix: {}", &key[..6]),
         key.starts_with("sk-"),
     );
@@ -386,7 +386,7 @@ async fn test_api_key_validation_flow() {
     let invalid_result = validator.validate("invalid-key").await;
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::validate_format",
+        "ProduceAiKeyValidator::validate_format",
         format!("Invalid format rejected: {}", invalid_result.is_err()),
         invalid_result.is_err(),
     );
@@ -395,16 +395,16 @@ async fn test_api_key_validation_flow() {
     let ctx = validator.validate(&key).await.unwrap();
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::validate",
+        "ProduceAiKeyValidator::validate",
         format!("Validated, user_id: {}", ctx.user_id),
         ctx.has_permission(&Permission::UseApi),
     );
 
     // 5. 哈希测试
-    let hash = ApiKeyValidator::hash_key(&key);
+    let hash = ProduceAiKeyValidator::hash_key(&key);
     chain.add_step(
         "keycompute-auth",
-        "ApiKeyValidator::hash_key",
+        "ProduceAiKeyValidator::hash_key",
         format!("Hash length: {}", hash.len()),
         hash.len() == 64, // SHA256 hex length
     );
@@ -423,19 +423,19 @@ async fn test_auth_service_integration() {
     let mut chain = VerificationChain::new();
 
     // 1. 创建 AuthService
-    let api_validator = ApiKeyValidator::new();
+    let api_validator = ProduceAiKeyValidator::new();
     let jwt_validator = JwtValidator::new("jwt-secret", "keycompute");
     let auth_service = AuthService::new(api_validator).with_jwt(jwt_validator);
 
     chain.add_step(
         "keycompute-auth",
         "AuthService::new",
-        "AuthService created with API Key and JWT support",
+        "AuthService created with Produce AI Key and JWT support",
         true,
     );
 
-    // 2. 验证 API Key
-    let api_key = ApiKeyValidator::generate_key();
+    // 2. 验证 Produce AI Key
+    let api_key = ProduceAiKeyValidator::generate_key();
     let ctx = auth_service.verify_api_key(&api_key).await.unwrap();
     chain.add_step(
         "keycompute-auth",

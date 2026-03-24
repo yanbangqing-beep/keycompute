@@ -35,7 +35,7 @@ impl RequestNormalizer {
 
         UpstreamRequest {
             endpoint: endpoint.to_string(),
-            api_key: api_key.to_string(),
+            upstream_api_key: api_key.to_string(),
             model: ctx.model.clone(),
             messages,
             stream: ctx.stream,
@@ -76,7 +76,7 @@ mod tests {
             request_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
-            api_key_id: Uuid::new_v4(),
+            produce_ai_key_id: Uuid::new_v4(),
             model: "gpt-4o".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),

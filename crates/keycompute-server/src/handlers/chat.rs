@@ -137,7 +137,7 @@ pub async fn chat_completions(
         request_id: request_id.0,
         user_id: auth.user_id,
         tenant_id: auth.tenant_id,
-        api_key_id: auth.api_key_id,
+        produce_ai_key_id: auth.produce_ai_key_id,
         model: request.model.clone(),
         messages: request.messages.clone(),
         stream: request.stream,

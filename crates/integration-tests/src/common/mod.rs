@@ -22,7 +22,7 @@ pub struct TestContext {
     pub request_id: Uuid,
     pub user_id: Uuid,
     pub tenant_id: Uuid,
-    pub api_key_id: Uuid,
+    pub produce_ai_key_id: Uuid,
 }
 
 impl TestContext {
@@ -32,7 +32,7 @@ impl TestContext {
             request_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
-            api_key_id: Uuid::new_v4(),
+            produce_ai_key_id: Uuid::new_v4(),
         }
     }
 }

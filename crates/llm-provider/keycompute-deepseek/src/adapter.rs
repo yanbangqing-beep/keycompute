@@ -10,7 +10,7 @@
 //! - 支持连接池复用和代理出口
 //!
 //! # 重要说明
-//! - `endpoint` 和 `api_key` 由调用方通过 `UpstreamRequest` 传入
+//! - `endpoint` 和 `upstream_api_key` 由调用方通过 `UpstreamRequest` 传入
 //! - 这些值通常从数据库 Account 表获取，而非配置文件
 //! - 管理员可通过前端界面动态配置，无需重启系统
 
@@ -116,7 +116,7 @@ impl DeepSeekProvider {
         let headers = vec![
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.api_key),
+                format!("Bearer {}", request.upstream_api_key),
             ),
             ("Content-Type".to_string(), "application/json".to_string()),
         ];
@@ -153,7 +153,7 @@ impl DeepSeekProvider {
         let headers = vec![
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.api_key),
+                format!("Bearer {}", request.upstream_api_key),
             ),
             ("Content-Type".to_string(), "application/json".to_string()),
             ("Accept".to_string(), "text/event-stream".to_string()),

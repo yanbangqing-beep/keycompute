@@ -37,7 +37,7 @@ async fn test_full_request_chain() {
         request_id: ctx.request_id,
         user_id: ctx.user_id,
         tenant_id: ctx.tenant_id,
-        api_key_id: ctx.api_key_id,
+        produce_ai_key_id: ctx.produce_ai_key_id,
         model: "gpt-4o".to_string(),
         messages: vec![Message {
             role: "user".to_string(),
@@ -141,7 +141,7 @@ async fn test_full_request_chain() {
         request_id: ctx.request_id,
         user_id: ctx.user_id,
         tenant_id: ctx.tenant_id,
-        api_key_id: ctx.api_key_id,
+        produce_ai_key_id: ctx.produce_ai_key_id,
         model: "gpt-4o".to_string(),
         provider: "openai".to_string(),
         account_id: uuid::Uuid::new_v4(),

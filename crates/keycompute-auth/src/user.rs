@@ -216,31 +216,34 @@ impl UserService {
         Ok(TenantInfo::new(tenant_id, "Test Tenant", "test-tenant"))
     }
 
-    /// 根据 API Key ID 加载用户信息
-    pub async fn load_by_api_key(&self, api_key_id: Uuid) -> Result<UserInfo> {
-        tracing::debug!(api_key_id = %api_key_id, "Loading user by API key");
+    /// 根据 Produce AI Key ID 加载用户信息
+    pub async fn load_by_produce_ai_key(&self, produce_ai_key_id: Uuid) -> Result<UserInfo> {
+        tracing::debug!(produce_ai_key_id = %produce_ai_key_id, "Loading user by Produce AI key");
 
         if let Some(pool) = &self.pool {
-            // 通过 API Key 查找用户
-            use keycompute_db::ApiKey;
-            let api_key = ApiKey::find_by_id(pool, api_key_id)
+            // 通过 Produce AI Key 查找用户
+            use keycompute_db::ProduceAiKey;
+            let produce_ai_key = ProduceAiKey::find_by_id(pool, produce_ai_key_id)
                 .await
                 .map_err(|e| {
-                    KeyComputeError::DatabaseError(format!("Failed to load API key: {}", e))
+                    KeyComputeError::DatabaseError(format!("Failed to load Produce AI key: {}", e))
                 })?
                 .ok_or_else(|| {
-                    KeyComputeError::AuthError(format!("API key not found: {}", api_key_id))
+                    KeyComputeError::AuthError(format!(
+                        "Produce AI key not found: {}",
+                        produce_ai_key_id
+                    ))
                 })?;
 
-            // 检查 API Key 是否有效
-            if !api_key.is_valid() {
+            // 检查 Produce AI Key 是否有效
+            if !produce_ai_key.is_valid() {
                 return Err(KeyComputeError::AuthError(
-                    "API key is revoked or expired".into(),
+                    "Produce AI key is revoked or expired".into(),
                 ));
             }
 
             // 加载用户
-            return self.load_user(api_key.user_id).await;
+            return self.load_user(produce_ai_key.user_id).await;
         }
 
         // 无数据库连接，返回模拟数据

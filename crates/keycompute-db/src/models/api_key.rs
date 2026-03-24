@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-/// API 密钥模型
+/// Produce AI Key 模型（用户访问系统的 API Key）
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct ApiKey {
+pub struct ProduceAiKey {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub name: String,
-    pub key_hash: String,
-    pub key_preview: String,
+    pub produce_ai_key_hash: String,
+    pub produce_ai_key_preview: String,
     pub revoked: bool,
     pub revoked_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -20,25 +20,25 @@ pub struct ApiKey {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 创建 API 密钥请求
+/// 创建 Produce AI Key 请求
 #[derive(Debug, Clone, Deserialize)]
-pub struct CreateApiKeyRequest {
+pub struct CreateProduceAiKeyRequest {
     pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub name: String,
-    pub key_hash: String,
-    pub key_preview: String,
+    pub produce_ai_key_hash: String,
+    pub produce_ai_key_preview: String,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-/// API 密钥响应（不包含敏感信息）
+/// Produce AI Key 响应（不包含敏感信息）
 #[derive(Debug, Clone, Serialize)]
-pub struct ApiKeyResponse {
+pub struct ProduceAiKeyResponse {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub name: String,
-    pub key_preview: String,
+    pub produce_ai_key_preview: String,
     pub revoked: bool,
     pub revoked_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -46,14 +46,14 @@ pub struct ApiKeyResponse {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<ApiKey> for ApiKeyResponse {
-    fn from(key: ApiKey) -> Self {
+impl From<ProduceAiKey> for ProduceAiKeyResponse {
+    fn from(key: ProduceAiKey) -> Self {
         Self {
             id: key.id,
             tenant_id: key.tenant_id,
             user_id: key.user_id,
             name: key.name,
-            key_preview: key.key_preview,
+            produce_ai_key_preview: key.produce_ai_key_preview,
             revoked: key.revoked,
             revoked_at: key.revoked_at,
             expires_at: key.expires_at,
@@ -63,15 +63,15 @@ impl From<ApiKey> for ApiKeyResponse {
     }
 }
 
-impl ApiKey {
-    /// 创建新 API 密钥
+impl ProduceAiKey {
+    /// 创建新 Produce AI Key
     pub async fn create(
         pool: &sqlx::PgPool,
-        req: &CreateApiKeyRequest,
-    ) -> Result<ApiKey, sqlx::Error> {
-        let key = sqlx::query_as::<_, ApiKey>(
+        req: &CreateProduceAiKeyRequest,
+    ) -> Result<ProduceAiKey, sqlx::Error> {
+        let key = sqlx::query_as::<_, ProduceAiKey>(
             r#"
-            INSERT INTO api_keys (tenant_id, user_id, name, key_hash, key_preview, expires_at)
+            INSERT INTO produce_ai_keys (tenant_id, user_id, name, produce_ai_key_hash, produce_ai_key_preview, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
             "#,
@@ -79,8 +79,8 @@ impl ApiKey {
         .bind(&req.tenant_id)
         .bind(&req.user_id)
         .bind(&req.name)
-        .bind(&req.key_hash)
-        .bind(&req.key_preview)
+        .bind(&req.produce_ai_key_hash)
+        .bind(&req.produce_ai_key_preview)
         .bind(&req.expires_at)
         .fetch_one(pool)
         .await?;
@@ -88,9 +88,12 @@ impl ApiKey {
         Ok(key)
     }
 
-    /// 根据 ID 查找 API 密钥
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<ApiKey>, sqlx::Error> {
-        let key = sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE id = $1")
+    /// 根据 ID 查找 Produce AI Key
+    pub async fn find_by_id(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+    ) -> Result<Option<ProduceAiKey>, sqlx::Error> {
+        let key = sqlx::query_as::<_, ProduceAiKey>("SELECT * FROM produce_ai_keys WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
             .await?;
@@ -98,26 +101,28 @@ impl ApiKey {
         Ok(key)
     }
 
-    /// 根据 key_hash 查找 API 密钥
+    /// 根据 produce_ai_key_hash 查找 Produce AI Key
     pub async fn find_by_hash(
         pool: &sqlx::PgPool,
-        key_hash: &str,
-    ) -> Result<Option<ApiKey>, sqlx::Error> {
-        let key = sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE key_hash = $1")
-            .bind(key_hash)
-            .fetch_optional(pool)
-            .await?;
+        produce_ai_key_hash: &str,
+    ) -> Result<Option<ProduceAiKey>, sqlx::Error> {
+        let key = sqlx::query_as::<_, ProduceAiKey>(
+            "SELECT * FROM produce_ai_keys WHERE produce_ai_key_hash = $1",
+        )
+        .bind(produce_ai_key_hash)
+        .fetch_optional(pool)
+        .await?;
 
         Ok(key)
     }
 
-    /// 查找用户的所有 API 密钥
+    /// 查找用户的所有 Produce AI Key
     pub async fn find_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Vec<ApiKey>, sqlx::Error> {
-        let keys = sqlx::query_as::<_, ApiKey>(
-            "SELECT * FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC",
+    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+        let keys = sqlx::query_as::<_, ProduceAiKey>(
+            "SELECT * FROM produce_ai_keys WHERE user_id = $1 ORDER BY created_at DESC",
         )
         .bind(user_id)
         .fetch_all(pool)
@@ -126,13 +131,13 @@ impl ApiKey {
         Ok(keys)
     }
 
-    /// 查找租户的所有 API 密钥
+    /// 查找租户的所有 Produce AI Key
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<ApiKey>, sqlx::Error> {
-        let keys = sqlx::query_as::<_, ApiKey>(
-            "SELECT * FROM api_keys WHERE tenant_id = $1 ORDER BY created_at DESC",
+    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+        let keys = sqlx::query_as::<_, ProduceAiKey>(
+            "SELECT * FROM produce_ai_keys WHERE tenant_id = $1 ORDER BY created_at DESC",
         )
         .bind(tenant_id)
         .fetch_all(pool)
@@ -141,11 +146,11 @@ impl ApiKey {
         Ok(keys)
     }
 
-    /// 撤销 API 密钥
-    pub async fn revoke(&self, pool: &sqlx::PgPool) -> Result<ApiKey, sqlx::Error> {
-        let key = sqlx::query_as::<_, ApiKey>(
+    /// 撤销 Produce AI Key
+    pub async fn revoke(&self, pool: &sqlx::PgPool) -> Result<ProduceAiKey, sqlx::Error> {
+        let key = sqlx::query_as::<_, ProduceAiKey>(
             r#"
-            UPDATE api_keys
+            UPDATE produce_ai_keys
             SET revoked = TRUE,
                 revoked_at = NOW(),
                 updated_at = NOW()
@@ -164,7 +169,7 @@ impl ApiKey {
     pub async fn update_last_used(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            UPDATE api_keys
+            UPDATE produce_ai_keys
             SET last_used_at = NOW(),
                 updated_at = NOW()
             WHERE id = $1

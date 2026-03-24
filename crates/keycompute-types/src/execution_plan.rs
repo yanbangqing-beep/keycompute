@@ -38,7 +38,7 @@ pub struct ExecutionTarget {
     pub provider: String,
     pub account_id: Uuid,
     pub endpoint: String,
-    pub api_key: String, // 已解密的上游 key
+    pub upstream_api_key: String, // 已解密的上游 Provider API Key
 }
 
 impl ExecutionTarget {
@@ -46,13 +46,13 @@ impl ExecutionTarget {
         provider: impl Into<String>,
         account_id: Uuid,
         endpoint: impl Into<String>,
-        api_key: impl Into<String>,
+        upstream_api_key: impl Into<String>,
     ) -> Self {
         Self {
             provider: provider.into(),
             account_id,
             endpoint: endpoint.into(),
-            api_key: api_key.into(),
+            upstream_api_key: upstream_api_key.into(),
         }
     }
 }

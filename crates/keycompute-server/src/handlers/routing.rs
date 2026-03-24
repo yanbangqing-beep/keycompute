@@ -80,7 +80,7 @@ pub async fn debug_routing(
         request_id,
         user_id: auth.user_id,
         tenant_id: auth.tenant_id,
-        api_key_id: auth.api_key_id,
+        produce_ai_key_id: auth.produce_ai_key_id,
         model: query.model.clone(),
         messages: vec![],
         stream: true,

@@ -34,7 +34,7 @@ fn create_test_context() -> RequestContext {
         request_id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         tenant_id: Uuid::new_v4(),
-        api_key_id: Uuid::new_v4(),
+        produce_ai_key_id: Uuid::new_v4(),
         model: "gpt-4o".to_string(),
         messages: vec![],
         stream: true,
@@ -766,7 +766,7 @@ async fn test_full_chain_concurrent_pressure() {
                     // Step 3: Provider request
                     let request = UpstreamRequest::new(
                         &plan.primary.endpoint,
-                        &plan.primary.api_key,
+                        &plan.primary.upstream_api_key,
                         &ctx.model,
                     );
 

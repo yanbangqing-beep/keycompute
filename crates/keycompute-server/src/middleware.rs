@@ -96,11 +96,11 @@ pub async fn rate_limit_middleware(
     // 使用 AuthService 验证 token 获取真实的用户信息
     let rate_key = match state.auth.verify_api_key(token).await {
         Ok(auth_context) => {
-            // 使用真实的 user_id, tenant_id, api_key_id 创建限流键
+            // 使用真实的 user_id, tenant_id, produce_ai_key_id 创建限流键
             RateLimitKey::new(
                 auth_context.tenant_id,
                 auth_context.user_id,
-                auth_context.api_key_id,
+                auth_context.produce_ai_key_id,
             )
         }
         Err(_) => {

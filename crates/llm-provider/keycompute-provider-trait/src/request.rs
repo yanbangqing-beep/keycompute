@@ -3,9 +3,9 @@
 //! 定义发送到上游 Provider 的标准化请求格式
 //!
 //! # 重要说明
-//! - `endpoint` 和 `api_key` 由调用方（如 Routing 引擎）在运行时动态传入
+//! - `endpoint` 和 `upstream_api_key` 由调用方（如 Routing 引擎）在运行时动态传入
 //! - 这些值通常从数据库中的 Account 表获取，而非配置文件
-//! - 管理员可通过前端界面动态配置 Provider 端点和 API Key，无需重启系统
+//! - 管理员可通过前端界面动态配置 Provider 端点和 Upstream API Key，无需重启系统
 
 use serde::{Deserialize, Serialize};
 
@@ -15,14 +15,14 @@ use serde::{Deserialize, Serialize};
 ///
 /// # 字段说明
 /// - `endpoint`: Provider API 端点 URL，由调用方传入（如从 Account 表获取）
-/// - `api_key`: Provider API Key，由调用方传入（如从 Account 表获取）
+/// - `upstream_api_key`: 上游 Provider API Key，由调用方传入（如从 Account 表获取）
 /// - 这些配置**不**从配置文件读取，支持运行时动态变更
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpstreamRequest {
     /// 上游 API 端点（由调用方传入，如从 Account 表获取）
     pub endpoint: String,
-    /// 上游 API Key（由调用方传入，如从 Account 表获取）
-    pub api_key: String,
+    /// 上游 Provider API Key（由调用方传入，如从 Account 表获取）
+    pub upstream_api_key: String,
     /// 模型名称
     pub model: String,
     /// 消息列表
@@ -41,12 +41,12 @@ impl UpstreamRequest {
     /// 创建新的上游请求
     pub fn new(
         endpoint: impl Into<String>,
-        api_key: impl Into<String>,
+        upstream_api_key: impl Into<String>,
         model: impl Into<String>,
     ) -> Self {
         Self {
             endpoint: endpoint.into(),
-            api_key: api_key.into(),
+            upstream_api_key: upstream_api_key.into(),
             model: model.into(),
             messages: Vec::new(),
             stream: true,

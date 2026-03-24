@@ -245,7 +245,7 @@ impl GatewayExecutor {
 
         UpstreamRequest {
             endpoint: target.endpoint.clone(),
-            api_key: target.api_key.clone(),
+            upstream_api_key: target.upstream_api_key.clone(),
             model: ctx.model.clone(),
             messages,
             stream: ctx.stream,
@@ -344,7 +344,7 @@ mod tests {
             request_id: uuid::Uuid::new_v4(),
             user_id: uuid::Uuid::new_v4(),
             tenant_id: uuid::Uuid::new_v4(),
-            api_key_id: uuid::Uuid::new_v4(),
+            produce_ai_key_id: uuid::Uuid::new_v4(),
             model: "gpt-4o".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),

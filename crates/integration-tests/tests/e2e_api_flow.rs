@@ -103,13 +103,13 @@ async fn test_api_request_flow() {
 async fn test_auth_flow() {
     use axum::http::HeaderMap;
     use axum::http::header::AUTHORIZATION;
-    use keycompute_auth::{ApiKeyValidator, AuthService};
+    use keycompute_auth::{AuthService, ProduceAiKeyValidator};
     use keycompute_server::extractors::AuthExtractor;
 
     let mut chain = VerificationChain::new();
 
     // 创建 AuthService
-    let auth_service = AuthService::new(ApiKeyValidator::default());
+    let auth_service = AuthService::new(ProduceAiKeyValidator::default());
 
     // 1. 测试有效 API Key
     let mut headers = HeaderMap::new();

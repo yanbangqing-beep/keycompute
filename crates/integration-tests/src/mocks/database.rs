@@ -101,15 +101,15 @@ impl MockTenant {
     }
 }
 
-/// 模拟 API Key 数据
+/// 模拟 Produce AI Key 数据
 #[derive(Debug, Clone)]
-pub struct MockApiKey {
+pub struct MockProduceAiKey {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
     pub name: String,
-    pub key_hash: String,
-    pub key_preview: String,
+    pub produce_ai_key_hash: String,
+    pub produce_ai_key_preview: String,
     pub revoked: bool,
     pub revoked_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -117,16 +117,16 @@ pub struct MockApiKey {
     pub created_at: DateTime<Utc>,
 }
 
-impl MockApiKey {
-    pub fn new(user_id: Uuid, tenant_id: Uuid, key_hash: impl Into<String>) -> Self {
+impl MockProduceAiKey {
+    pub fn new(user_id: Uuid, tenant_id: Uuid, produce_ai_key_hash: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             tenant_id,
             user_id,
             name: "Test Key".to_string(),
-            key_hash: key_hash.into(),
-            key_preview: "sk-****".to_string(),
+            produce_ai_key_hash: produce_ai_key_hash.into(),
+            produce_ai_key_preview: "sk-****".to_string(),
             revoked: false,
             revoked_at: None,
             expires_at: None,
@@ -173,7 +173,7 @@ pub struct MockUsageLog {
     pub request_id: Uuid,
     pub tenant_id: Uuid,
     pub user_id: Uuid,
-    pub api_key_id: Uuid,
+    pub produce_ai_key_id: Uuid,
     pub model_name: String,
     pub provider_name: String,
     pub account_id: Uuid,
@@ -198,7 +198,7 @@ impl MockUsageLog {
             request_id: ctx.request_id,
             tenant_id: ctx.tenant_id,
             user_id: ctx.user_id,
-            api_key_id: ctx.api_key_id,
+            produce_ai_key_id: ctx.produce_ai_key_id,
             model_name: ctx.model.clone(),
             provider_name: ctx.provider.clone(),
             account_id: ctx.account_id,
@@ -316,8 +316,8 @@ impl MockDatabase {
 pub struct MockUserTenantDatabase {
     tenants: RwLock<HashMap<Uuid, MockTenant>>,
     users: RwLock<HashMap<Uuid, MockUser>>,
-    api_keys: RwLock<HashMap<Uuid, MockApiKey>>,
-    api_keys_by_hash: RwLock<HashMap<String, Uuid>>,
+    produce_ai_keys: RwLock<HashMap<Uuid, MockProduceAiKey>>,
+    produce_ai_keys_by_hash: RwLock<HashMap<String, Uuid>>,
     users_by_email: RwLock<HashMap<String, Uuid>>,
 }
 
@@ -332,8 +332,8 @@ impl MockUserTenantDatabase {
         Self {
             tenants: RwLock::new(HashMap::new()),
             users: RwLock::new(HashMap::new()),
-            api_keys: RwLock::new(HashMap::new()),
-            api_keys_by_hash: RwLock::new(HashMap::new()),
+            produce_ai_keys: RwLock::new(HashMap::new()),
+            produce_ai_keys_by_hash: RwLock::new(HashMap::new()),
             users_by_email: RwLock::new(HashMap::new()),
         }
     }
@@ -393,38 +393,47 @@ impl MockUserTenantDatabase {
             .collect()
     }
 
-    // === API Key 操作 ===
+    // === Produce AI Key 操作 ===
 
-    pub fn insert_api_key(&self, api_key: MockApiKey) {
-        let id = api_key.id;
-        let key_hash = api_key.key_hash.clone();
-        self.api_keys.write().unwrap().insert(id, api_key);
-        self.api_keys_by_hash.write().unwrap().insert(key_hash, id);
+    pub fn insert_produce_ai_key(&self, produce_ai_key: MockProduceAiKey) {
+        let id = produce_ai_key.id;
+        let produce_ai_key_hash = produce_ai_key.produce_ai_key_hash.clone();
+        self.produce_ai_keys
+            .write()
+            .unwrap()
+            .insert(id, produce_ai_key);
+        self.produce_ai_keys_by_hash
+            .write()
+            .unwrap()
+            .insert(produce_ai_key_hash, id);
     }
 
-    pub fn get_api_key(&self, id: Uuid) -> Option<MockApiKey> {
-        self.api_keys.read().unwrap().get(&id).cloned()
+    pub fn get_produce_ai_key(&self, id: Uuid) -> Option<MockProduceAiKey> {
+        self.produce_ai_keys.read().unwrap().get(&id).cloned()
     }
 
-    pub fn get_api_key_by_hash(&self, key_hash: &str) -> Option<MockApiKey> {
+    pub fn get_produce_ai_key_by_hash(
+        &self,
+        produce_ai_key_hash: &str,
+    ) -> Option<MockProduceAiKey> {
         let id = self
-            .api_keys_by_hash
+            .produce_ai_keys_by_hash
             .read()
             .unwrap()
-            .get(key_hash)
+            .get(produce_ai_key_hash)
             .copied()?;
-        self.get_api_key(id)
+        self.get_produce_ai_key(id)
     }
 
-    pub fn revoke_api_key(&self, id: Uuid) {
-        if let Some(key) = self.api_keys.write().unwrap().get_mut(&id) {
+    pub fn revoke_produce_ai_key(&self, id: Uuid) {
+        if let Some(key) = self.produce_ai_keys.write().unwrap().get_mut(&id) {
             key.revoked = true;
             key.revoked_at = Some(Utc::now());
         }
     }
 
-    pub fn update_api_key_last_used(&self, id: Uuid) {
-        if let Some(key) = self.api_keys.write().unwrap().get_mut(&id) {
+    pub fn update_produce_ai_key_last_used(&self, id: Uuid) {
+        if let Some(key) = self.produce_ai_keys.write().unwrap().get_mut(&id) {
             key.last_used_at = Some(Utc::now());
         }
     }
@@ -435,8 +444,8 @@ impl MockUserTenantDatabase {
     pub fn clear(&self) {
         self.tenants.write().unwrap().clear();
         self.users.write().unwrap().clear();
-        self.api_keys.write().unwrap().clear();
-        self.api_keys_by_hash.write().unwrap().clear();
+        self.produce_ai_keys.write().unwrap().clear();
+        self.produce_ai_keys_by_hash.write().unwrap().clear();
         self.users_by_email.write().unwrap().clear();
     }
 
@@ -455,13 +464,17 @@ impl MockUserTenantDatabase {
         user
     }
 
-    /// 创建测试 API Key 并返回
-    pub fn create_test_api_key(&self, user_id: Uuid, tenant_id: Uuid) -> (MockApiKey, String) {
+    /// 创建测试 Produce AI Key 并返回
+    pub fn create_test_produce_ai_key(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> (MockProduceAiKey, String) {
         let raw_key = format!("sk-test-{}", Uuid::new_v4().simple());
-        let key_hash = sha256_hash(&raw_key);
-        let api_key = MockApiKey::new(user_id, tenant_id, key_hash);
-        self.insert_api_key(api_key.clone());
-        (api_key, raw_key)
+        let produce_ai_key_hash = sha256_hash(&raw_key);
+        let produce_ai_key = MockProduceAiKey::new(user_id, tenant_id, produce_ai_key_hash);
+        self.insert_produce_ai_key(produce_ai_key.clone());
+        (produce_ai_key, raw_key)
     }
 
     /// 获取统计信息
@@ -469,7 +482,7 @@ impl MockUserTenantDatabase {
         MockDatabaseStats {
             tenant_count: self.tenants.read().unwrap().len(),
             user_count: self.users.read().unwrap().len(),
-            api_key_count: self.api_keys.read().unwrap().len(),
+            produce_ai_key_count: self.produce_ai_keys.read().unwrap().len(),
         }
     }
 }
@@ -479,7 +492,7 @@ impl MockUserTenantDatabase {
 pub struct MockDatabaseStats {
     pub tenant_count: usize,
     pub user_count: usize,
-    pub api_key_count: usize,
+    pub produce_ai_key_count: usize,
 }
 
 /// SHA256 哈希
@@ -549,10 +562,10 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_api_key() {
+    fn test_mock_produce_ai_key() {
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
-        let key = MockApiKey::new(user_id, tenant_id, "test-hash");
+        let key = MockProduceAiKey::new(user_id, tenant_id, "test-hash");
 
         assert_eq!(key.user_id, user_id);
         assert_eq!(key.tenant_id, tenant_id);
@@ -560,14 +573,14 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_api_key_revoked() {
-        let key = MockApiKey::new(Uuid::new_v4(), Uuid::new_v4(), "hash").with_revoked(true);
+    fn test_mock_produce_ai_key_revoked() {
+        let key = MockProduceAiKey::new(Uuid::new_v4(), Uuid::new_v4(), "hash").with_revoked(true);
         assert!(!key.is_valid());
     }
 
     #[test]
-    fn test_mock_api_key_expired() {
-        let key = MockApiKey::new(Uuid::new_v4(), Uuid::new_v4(), "hash")
+    fn test_mock_produce_ai_key_expired() {
+        let key = MockProduceAiKey::new(Uuid::new_v4(), Uuid::new_v4(), "hash")
             .with_expires_at(Utc::now() - chrono::Duration::hours(1));
         assert!(!key.is_valid());
     }
@@ -585,16 +598,16 @@ mod tests {
         assert!(db.get_user(user.id).is_some());
         assert!(db.get_user_by_email(&user.email).is_some());
 
-        // 创建 API Key
-        let (api_key, raw_key) = db.create_test_api_key(user.id, tenant.id);
-        assert!(db.get_api_key(api_key.id).is_some());
+        // 创建 Produce AI Key
+        let (produce_ai_key, raw_key) = db.create_test_produce_ai_key(user.id, tenant.id);
+        assert!(db.get_produce_ai_key(produce_ai_key.id).is_some());
         assert!(raw_key.starts_with("sk-test-"));
 
         // 统计
         let stats = db.stats();
         assert_eq!(stats.tenant_count, 1);
         assert_eq!(stats.user_count, 1);
-        assert_eq!(stats.api_key_count, 1);
+        assert_eq!(stats.produce_ai_key_count, 1);
     }
 
     #[test]
@@ -615,11 +628,11 @@ mod tests {
         let updated_tenant = db.get_tenant(tenant.id).unwrap();
         assert_eq!(updated_tenant.status, "suspended");
 
-        // 撤销 API Key
-        let (api_key, _) = db.create_test_api_key(user1.id, tenant.id);
-        assert!(db.get_api_key(api_key.id).unwrap().is_valid());
+        // 撤销 Produce AI Key
+        let (produce_ai_key, _) = db.create_test_produce_ai_key(user1.id, tenant.id);
+        assert!(db.get_produce_ai_key(produce_ai_key.id).unwrap().is_valid());
 
-        db.revoke_api_key(api_key.id);
-        assert!(!db.get_api_key(api_key.id).unwrap().is_valid());
+        db.revoke_produce_ai_key(produce_ai_key.id);
+        assert!(!db.get_produce_ai_key(produce_ai_key.id).unwrap().is_valid());
     }
 }

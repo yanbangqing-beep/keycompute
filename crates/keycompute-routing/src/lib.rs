@@ -412,7 +412,7 @@ impl RoutingEngine {
                 provider: provider.to_string(),
                 account_id: account.id,
                 endpoint: account.endpoint,
-                api_key: account.api_key_encrypted, // 注意：实际应解密
+                upstream_api_key: account.upstream_api_key_encrypted, // 注意：实际应解密
             };
 
             return Ok(Some(target));
@@ -445,7 +445,7 @@ impl RoutingEngine {
             provider: provider.to_string(),
             account_id,
             endpoint: format!("https://api.{}.com/v1/chat/completions", provider),
-            api_key: "mock-api-key".to_string(),
+            upstream_api_key: "mock-api-key".to_string(),
         };
 
         Ok(Some(target))
@@ -526,7 +526,7 @@ mod tests {
             request_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
-            api_key_id: Uuid::new_v4(),
+            produce_ai_key_id: Uuid::new_v4(),
             model: "gpt-4o".to_string(),
             messages: vec![],
             stream: true,
