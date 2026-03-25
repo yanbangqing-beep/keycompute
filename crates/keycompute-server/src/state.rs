@@ -6,7 +6,9 @@ use keycompute_auth::{AuthService, JwtValidator, ProduceAiKeyValidator};
 use keycompute_billing::BillingService;
 use keycompute_provider_trait::ProviderAdapter;
 use keycompute_routing::RoutingEngine;
-use keycompute_runtime::{AccountStateStore, CooldownManager, ProviderHealthStore};
+use keycompute_runtime::{
+    AccountStateStore, CooldownManager, ProviderHealthStore, set_global_crypto,
+};
 use llm_gateway::{GatewayBuilder, GatewayExecutor, HttpProxy, ProxyConfig as HttpProxyConfig};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -89,6 +91,40 @@ impl AppStateConfig {
             gateway: config.gateway.clone(),
         }
     }
+}
+
+/// 初始化全局加密密钥
+///
+/// 从配置中读取加密密钥并设置全局加密器。
+/// 应在应用启动时调用一次。
+///
+/// # 参数
+/// - `config`: 应用配置
+///
+/// # 返回
+/// - `Ok(())`: 成功初始化或无加密配置
+/// - `Err(...)`: 密钥格式错误
+///
+/// # 示例
+/// ```rust,ignore
+/// let config = AppConfig::load()?;
+/// init_global_crypto(&config)?;
+/// let state = AppState::with_config(AppStateConfig::from_config(&config));
+/// ```
+pub fn init_global_crypto(config: &keycompute_config::AppConfig) -> crate::error::Result<()> {
+    if let Some(crypto) = &config.crypto {
+        if let Some(key) = crypto.secret_key() {
+            set_global_crypto(key).map_err(|e| {
+                crate::error::ApiError::Config(format!("Failed to set global crypto key: {}", e))
+            })?;
+            tracing::info!("Global crypto key initialized from config");
+        } else {
+            tracing::info!("No crypto key configured, upstream API keys will be used as plaintext");
+        }
+    } else {
+        tracing::info!("No crypto config found, upstream API keys will be used as plaintext");
+    }
+    Ok(())
 }
 
 /// 应用状态

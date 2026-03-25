@@ -10,12 +10,14 @@ use serde::Deserialize;
 use std::path::Path;
 
 pub mod auth;
+pub mod crypto;
 pub mod database;
 pub mod gateway;
 pub mod redis;
 pub mod server;
 
 pub use auth::AuthConfig;
+pub use crypto::CryptoConfig;
 pub use database::DatabaseConfig;
 pub use gateway::{GatewayConfig, ProxyConfig};
 pub use redis::RedisConfig;
@@ -34,6 +36,8 @@ pub struct AppConfig {
     pub auth: AuthConfig,
     /// Gateway 配置
     pub gateway: GatewayConfig,
+    /// 加密配置（可选）
+    pub crypto: Option<CryptoConfig>,
 }
 
 /// 配置加载错误
@@ -82,8 +86,7 @@ impl AppConfig {
         builder = builder.add_source(
             Environment::with_prefix("KC")
                 .separator("__")
-                .try_parsing(true)
-                .list_separator(","),
+                .try_parsing(true),
         );
 
         let config = builder.build()?;
@@ -102,8 +105,7 @@ impl AppConfig {
         builder = builder.add_source(
             Environment::with_prefix("KC")
                 .separator("__")
-                .try_parsing(true)
-                .list_separator(","),
+                .try_parsing(true),
         );
 
         let config = builder.build()?;
@@ -194,6 +196,7 @@ impl Default for AppConfig {
             redis: None,
             auth: AuthConfig::default(),
             gateway: GatewayConfig::default(),
+            crypto: None,
         }
     }
 }
@@ -223,6 +226,27 @@ mod tests {
         // 清理
         unsafe {
             std::env::remove_var("KC__SERVER__PORT");
+        }
+    }
+
+    #[test]
+    fn test_crypto_config_from_env() {
+        // 设置 crypto 环境变量
+        unsafe {
+            std::env::set_var("KC__CRYPTO__SECRET_KEY", "dGVzdC1rZXktZnJvbS1lbnY=");
+        }
+
+        let config = AppConfig::from_env().expect("应该从环境变量加载配置");
+
+        // 验证 crypto 配置被正确加载
+        assert!(config.crypto.is_some(), "crypto 配置应该存在");
+        let crypto = config.crypto.unwrap();
+        assert!(crypto.has_key(), "crypto 应该有密钥");
+        assert_eq!(crypto.secret_key(), Some("dGVzdC1rZXktZnJvbS1lbnY="));
+
+        // 清理
+        unsafe {
+            std::env::remove_var("KC__CRYPTO__SECRET_KEY");
         }
     }
 }

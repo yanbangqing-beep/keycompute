@@ -4,7 +4,9 @@
 //! 架构约束：只读 Pricing 和 Runtime 状态快照，不写任何状态。
 
 use keycompute_db::Account;
-use keycompute_runtime::{AccountStateStore, CooldownManager, ProviderHealthStore};
+use keycompute_runtime::{
+    AccountStateStore, CooldownManager, EncryptedApiKey, ProviderHealthStore, decrypt_api_key,
+};
 use keycompute_types::{
     ExecutionPlan, ExecutionTarget, KeyComputeError, PricingSnapshot, RequestContext, Result,
 };
@@ -408,17 +410,53 @@ impl RoutingEngine {
             );
 
             // 选择评分最低的账号
+            // 解密上游 API Key
+            let upstream_api_key =
+                Self::decrypt_upstream_api_key(&account.upstream_api_key_encrypted)?;
+
             let target = ExecutionTarget {
                 provider: provider.to_string(),
                 account_id: account.id,
                 endpoint: account.endpoint,
-                upstream_api_key: account.upstream_api_key_encrypted, // 注意：实际应解密
+                upstream_api_key,
             };
 
             return Ok(Some(target));
         }
 
         Ok(None)
+    }
+
+    /// 解密上游 API Key
+    ///
+    /// 尝试解密存储的 API Key。如果全局加密密钥未设置，
+    /// 说明系统可能还在使用明文存储，此时回退使用原始值。
+    fn decrypt_upstream_api_key(encrypted_value: &str) -> Result<String> {
+        // 尝试使用全局密钥解密
+        match decrypt_api_key(&EncryptedApiKey::from(encrypted_value)) {
+            Ok(decrypted) => {
+                tracing::trace!("Successfully decrypted upstream API key");
+                Ok(decrypted)
+            }
+            Err(keycompute_runtime::CryptoError::InvalidKey(msg))
+                if msg.contains("Global crypto key not set") =>
+            {
+                // 全局密钥未设置，回退使用原始值（可能存储的是明文）
+                tracing::warn!(
+                    "Global crypto key not set, using stored value as plaintext. \n\
+                     This is acceptable for development but should be fixed in production."
+                );
+                Ok(encrypted_value.to_string())
+            }
+            Err(e) => {
+                // 其他解密错误
+                tracing::error!(error = %e, "Failed to decrypt upstream API key");
+                Err(KeyComputeError::Internal(format!(
+                    "Failed to decrypt upstream API key: {}",
+                    e
+                )))
+            }
+        }
     }
 
     /// 回退账号选择（无数据库时使用）
@@ -749,5 +787,29 @@ mod tests {
         // 现在应该在冷却中
         assert!(engine.is_account_cooling(&account_id));
         assert!(engine.account_cooldown_remaining(&account_id).is_some());
+    }
+
+    #[test]
+    fn test_decrypt_upstream_api_key_without_global_key() {
+        // 当全局密钥未设置时，应该回退使用原始值
+        let result = RoutingEngine::decrypt_upstream_api_key("test-api-key");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-api-key");
+    }
+
+    #[test]
+    fn test_decrypt_upstream_api_key_with_global_key() {
+        // 设置全局密钥
+        let key = keycompute_runtime::ApiKeyCrypto::generate_key();
+        keycompute_runtime::set_global_crypto(&key).expect("Failed to set global crypto");
+
+        // 加密一个 API Key
+        let plaintext = "sk-test-secret-key-123";
+        let encrypted = keycompute_runtime::encrypt_api_key(plaintext).expect("Failed to encrypt");
+
+        // 解密应该返回原始值
+        let result = RoutingEngine::decrypt_upstream_api_key(encrypted.as_str());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), plaintext);
     }
 }

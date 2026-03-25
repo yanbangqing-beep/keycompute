@@ -84,3 +84,16 @@ backoff_multiplier = 2.0
 # [gateway.proxy.patterns]
 # "*-cn" = "http://cn-proxy:8080"
 # "openai-*" = "http://openai-proxy:8080"
+
+# ==================== 加密配置（可选）====================
+# 用于上游 Provider API Key 的加密存储
+# 生产环境强烈建议配置！
+# 
+# [crypto]
+# 加密密钥（Base64 编码的 32 字节密钥）
+# 生成方式：openssl rand -base64 32
+# 或在代码中：keycompute_runtime::ApiKeyCrypto::generate_key()
+#
+# 环境变量方式（推荐）：KC__CRYPTO__SECRET_KEY
+#
+# secret_key = "your-base64-encoded-32-byte-key"
