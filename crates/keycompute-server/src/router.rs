@@ -51,6 +51,7 @@ use crate::{
         register_handler,
         resend_verification_handler,
         reset_password_handler,
+        retrieve_model,
         test_account,
         update_account,
         update_profile,
@@ -91,9 +92,13 @@ pub fn create_router(state: AppState) -> Router {
 
     // ==================== 2. OpenAI 兼容 API（需要限流） ====================
     // 这些端点使用 API Key 认证，路径保持与 OpenAI 一致
+    // 参考: https://platform.openai.com/docs/api-reference
     let openai_routes = Router::new()
+        // Chat Completions
         .route("/v1/chat/completions", post(chat_completions))
+        // Models
         .route("/v1/models", get(list_models))
+        .route("/v1/models/{model}", get(retrieve_model))
         .layer(from_fn_with_state(state.clone(), rate_limit_middleware));
 
     // ==================== 3. 用户自服务 API（需要认证 + 限流） ====================
