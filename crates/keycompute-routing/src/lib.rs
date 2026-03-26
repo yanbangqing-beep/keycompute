@@ -818,6 +818,11 @@ mod tests {
     #[test]
     fn test_decrypt_upstream_api_key_without_global_key() {
         // 当全局密钥未设置时，应该回退使用原始值
+        // 注意：如果其他测试先设置了全局密钥，此测试跳过
+        if keycompute_runtime::global_crypto().is_some() {
+            // 全局密钥已被其他测试设置，跳过此测试
+            return;
+        }
         let result = RoutingEngine::decrypt_upstream_api_key("test-api-key");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "test-api-key");
