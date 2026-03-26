@@ -24,6 +24,7 @@ keycompute-deepseek = { workspace = true }
 keycompute-vllm = { workspace = true }
 keycompute-claude = { workspace = true }
 keycompute-ollama = { workspace = true }
+keycompute-gemini = { workspace = true }
 
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }

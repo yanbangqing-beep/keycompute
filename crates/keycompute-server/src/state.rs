@@ -234,6 +234,7 @@ impl AppState {
                 .add_provider("vllm", Arc::new(keycompute_vllm::VllmProvider::new()))
                 .add_provider("claude", Arc::new(keycompute_claude::ClaudeProvider::new()))
                 .add_provider("ollama", Arc::new(keycompute_ollama::OllamaProvider::new()))
+                .add_provider("gemini", Arc::new(keycompute_gemini::GeminiProvider::new()))
                 .with_http_proxy(Arc::clone(&http_proxy))
                 .build(),
         );
@@ -369,6 +370,7 @@ impl AppState {
                 .add_provider("vllm", Arc::new(keycompute_vllm::VllmProvider::new()))
                 .add_provider("claude", Arc::new(keycompute_claude::ClaudeProvider::new()))
                 .add_provider("ollama", Arc::new(keycompute_ollama::OllamaProvider::new()))
+                .add_provider("gemini", Arc::new(keycompute_gemini::GeminiProvider::new()))
                 .with_http_proxy(Arc::clone(&http_proxy))
                 .build(),
         );
