@@ -73,7 +73,7 @@ jobs:
         run: cargo test --lib --verbose
 
       - name: Run integration tests
-        run: cargo test --package integration-tests --verbose
+        run: cargo test --package integration-tests --tests --verbose
         env:
           KC__DATABASE__URL: postgres://postgres:password@localhost:5432/keycompute
           KC__REDIS__URL: redis://localhost:6379
