@@ -15,11 +15,7 @@ web/
 ```
 
 ## Dependencies
-Since you have fullstack enabled, the web crate will be built two times:
-1. Once for the server build with the `server` feature enabled
-2. Once for the client build with the `web` feature enabled
-
-You should make all web specific dependencies optional and only enabled in the `web` feature. This will ensure that the server builds don't pull in web specific dependencies which cuts down on build times significantly.
+This crate will only be included in the web build, so you should add all web specific dependencies to this crate's [Cargo.toml](../Cargo.toml) file instead of the shared [ui](../ui/Cargo.toml) crate.
 
 ### Serving Your Web App
 

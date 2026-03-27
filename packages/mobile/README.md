@@ -15,11 +15,7 @@ mobile/
 ```
 
 ## Dependencies
-Since you have fullstack enabled, the mobile crate will be built two times:
-1. Once for the server build with the `server` feature enabled
-2. Once for the client build with the `mobile` feature enabled
-
-You should make all mobile specific dependencies optional and only enabled in the `mobile` feature. This will ensure that the server builds don't pull in mobile specific dependencies which cuts down on build times significantly.
+This crate will only be included in the mobile build, so you should add all mobile specific dependencies to this crate's [Cargo.toml](../Cargo.toml) file instead of the shared [ui](../ui/Cargo.toml) crate.
 
 ### Serving Your Mobile App
 

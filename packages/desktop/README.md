@@ -15,11 +15,7 @@ desktop/
 ```
 
 ## Dependencies
-Since you have fullstack enabled, the desktop crate will be built two times:
-1. Once for the server build with the `server` feature enabled
-2. Once for the client build with the `desktop` feature enabled
-
-You should make all desktop specific dependencies optional and only enabled in the `desktop` feature. This will ensure that the server builds don't pull in desktop specific dependencies which cuts down on build times significantly.
+This crate will only be included in the desktop build, so you should add all desktop specific dependencies to this crate's [Cargo.toml](../Cargo.toml) file instead of the shared [ui](../ui/Cargo.toml) crate.
 
 ### Serving Your Desktop App
 
