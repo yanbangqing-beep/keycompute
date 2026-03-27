@@ -59,19 +59,10 @@ async fn create_test_pool() -> PgPool {
     pool
 }
 
-/// 测试数据隔离标识符，用于区分不同测试运行的数据
-/// 每个测试实例使用唯一的 run_id 来隔离数据，避免并行测试冲突
-fn get_test_run_id() -> String {
-    use std::sync::Mutex;
-    use std::sync::OnceLock;
-
-    static RUN_ID: OnceLock<Mutex<String>> = OnceLock::new();
-
-    RUN_ID
-        .get_or_init(|| Mutex::new(Uuid::new_v4().simple().to_string()))
-        .lock()
-        .unwrap()
-        .clone()
+/// 生成唯一的测试标识符
+/// 每个调用返回一个新的 UUID，用于确保测试数据完全隔离
+fn generate_test_id() -> String {
+    Uuid::new_v4().simple().to_string()
 }
 
 /// 清理特定测试运行的数据
@@ -104,14 +95,13 @@ async fn cleanup_test_data(pool: &PgPool, run_id: &str) {
 }
 
 /// 创建测试租户
-/// 使用 run_id 确保数据隔离，避免并行测试冲突
-async fn create_test_tenant(pool: &PgPool, suffix: &str) -> Tenant {
-    let run_id = get_test_run_id();
+/// 使用 test_id 确保数据隔离，避免并行测试冲突
+async fn create_test_tenant(pool: &PgPool, suffix: &str, test_id: &str) -> Tenant {
     Tenant::create(
         pool,
         &CreateTenantRequest {
             name: format!("Test Tenant {}", suffix),
-            slug: format!("test-tenant-{}-{}", suffix, run_id),
+            slug: format!("test-tenant-{}-{}", suffix, test_id),
             description: Some(format!("Test tenant for {}", suffix)),
             default_rpm_limit: Some(100),
             default_tpm_limit: Some(50000),
@@ -228,11 +218,11 @@ async fn test_tenant_crud() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建租户
-    let tenant = create_test_tenant(&pool, "crud").await;
+    let tenant = create_test_tenant(&pool, "crud", &test_id).await;
     chain.add_step(
         "keycompute-db",
         "Tenant::create",
@@ -342,11 +332,11 @@ async fn test_user_crud() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建租户和用户
-    let tenant = create_test_tenant(&pool, "user-crud").await;
+    let tenant = create_test_tenant(&pool, "user-crud", &test_id).await;
     let user = create_test_user(&pool, tenant.id, "user-crud").await;
 
     chain.add_step(
@@ -432,11 +422,11 @@ async fn test_api_key_operations() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建租户和用户
-    let tenant = create_test_tenant(&pool, "apikey").await;
+    let tenant = create_test_tenant(&pool, "apikey", &test_id).await;
     let user = create_test_user(&pool, tenant.id, "apikey").await;
 
     // 2. 创建 API Key
@@ -524,11 +514,11 @@ async fn test_usage_log_operations() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建测试数据
-    let tenant = create_test_tenant(&pool, "usage").await;
+    let tenant = create_test_tenant(&pool, "usage", &test_id).await;
     let user = create_test_user(&pool, tenant.id, "usage").await;
     let key_hash = format!("hash-usage-{}", Uuid::new_v4().simple());
     let api_key = ProduceAiKey::create(
@@ -663,12 +653,12 @@ async fn test_multi_tenant_isolation() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建两个租户
-    let tenant1 = create_test_tenant(&pool, "isolation-1").await;
-    let tenant2 = create_test_tenant(&pool, "isolation-2").await;
+    let tenant1 = create_test_tenant(&pool, "isolation-1", &test_id).await;
+    let tenant2 = create_test_tenant(&pool, "isolation-2", &test_id).await;
 
     chain.add_step(
         "keycompute-db",
@@ -740,11 +730,11 @@ async fn test_concurrent_operations() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建租户
-    let tenant = create_test_tenant(&pool, "concurrent").await;
+    let tenant = create_test_tenant(&pool, "concurrent", &test_id).await;
     let pool = Arc::new(pool);
     let tenant_id = tenant.id;
 
@@ -829,11 +819,11 @@ async fn test_database_transaction() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 测试事务提交
-    let tx_slug = format!("test-tx-tenant-{}", run_id);
+    let tx_slug = format!("test-tx-tenant-{}", test_id);
     let tenant_id = {
         let mut tx = pool.begin().await.expect("Failed to begin transaction");
 
@@ -868,7 +858,7 @@ async fn test_database_transaction() {
     );
 
     // 2. 测试事务回滚
-    let rollback_slug = format!("test-rollback-tenant-{}", run_id);
+    let rollback_slug = format!("test-rollback-tenant-{}", test_id);
     {
         let mut tx = pool.begin().await.expect("Failed to begin transaction");
 
@@ -905,11 +895,11 @@ async fn test_full_business_chain() {
     let mut chain = VerificationChain::new();
 
     let pool = create_test_pool().await;
-    let run_id = get_test_run_id();
-    cleanup_test_data(&pool, &run_id).await;
+    let test_id = generate_test_id();
+    cleanup_test_data(&pool, &test_id).await;
 
     // 1. 创建租户
-    let tenant = create_test_tenant(&pool, "full-chain").await;
+    let tenant = create_test_tenant(&pool, "full-chain", &test_id).await;
     chain.add_step(
         "keycompute-db",
         "step1_tenant",
