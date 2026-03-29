@@ -64,64 +64,6 @@ impl ApiClient {
         self.get_token().is_some()
     }
 
-    /// 发送 GET 请求
-    pub async fn get(&self, path: &str) -> Result<Response> {
-        self.request(Method::GET, path)
-            .send()
-            .await
-            .map_err(ClientError::from)
-    }
-
-    /// 发送 POST 请求
-    pub async fn post<T: Serialize>(&self, path: &str, body: &T) -> Result<Response> {
-        self.request(Method::POST, path)
-            .json(body)
-            .send()
-            .await
-            .map_err(ClientError::from)
-    }
-
-    /// 发送 PUT 请求
-    pub async fn put<T: Serialize>(&self, path: &str, body: &T) -> Result<Response> {
-        self.request(Method::PUT, path)
-            .json(body)
-            .send()
-            .await
-            .map_err(ClientError::from)
-    }
-
-    /// 发送 DELETE 请求
-    pub async fn delete(&self, path: &str) -> Result<Response> {
-        self.request(Method::DELETE, path)
-            .send()
-            .await
-            .map_err(ClientError::from)
-    }
-
-    /// 发送 PATCH 请求
-    pub async fn patch<T: Serialize>(&self, path: &str, body: &T) -> Result<Response> {
-        self.request(Method::PATCH, path)
-            .json(body)
-            .send()
-            .await
-            .map_err(ClientError::from)
-    }
-
-    /// 构建请求
-    fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        let url = self.inner.config.build_url(path);
-        let builder = self.inner.client.request(method, &url);
-        self.add_auth_header(builder)
-    }
-
-    /// 添加认证头
-    fn add_auth_header(&self, builder: RequestBuilder) -> RequestBuilder {
-        // 使用 try_block 来简化异步操作
-        // 注意：这里我们使用同步方式获取 token，因为 request 方法是同步的
-        // 在实际请求时会通过 interceptor 方式添加 token
-        builder
-    }
-
     /// 发送请求（带认证）
     pub async fn request_with_auth(
         &self,

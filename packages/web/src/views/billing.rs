@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::router::Route;
-use crate::services::billing_service;
+use crate::services::{api_client::with_auto_refresh, billing_service};
 use crate::stores::auth_store::AuthStore;
 
 /// 账单页面 - /billing
@@ -12,14 +12,18 @@ pub fn Billing() -> Element {
 
     // 账单统计
     let stats = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        billing_service::stats(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            billing_service::stats(&token).await
+        })
+        .await
     });
 
     // 账单记录
     let records = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        billing_service::list(None, &token).await
+        with_auto_refresh(auth_store, |token| async move {
+            billing_service::list(None, &token).await
+        })
+        .await
     });
 
     rsx! {

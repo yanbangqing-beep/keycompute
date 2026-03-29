@@ -5,7 +5,7 @@ use client_api::{
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
 
-use crate::services::api_client::get_client;
+use crate::services::api_client::{get_client, with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -34,12 +34,14 @@ fn AdminUsersView() -> Element {
     let mut search = use_signal(String::new);
 
     let users = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        let client = get_client();
-        let params = UserQueryParams::new().with_limit(50);
-        AdminApi::new(&client)
-            .list_all_users(Some(&params), &token)
-            .await
+        with_auto_refresh(auth_store, |token| async move {
+            let client = get_client();
+            let params = UserQueryParams::new().with_limit(50);
+            AdminApi::new(&client)
+                .list_all_users(Some(&params), &token)
+                .await
+        })
+        .await
     });
 
     let filtered_users = move || -> Vec<UserDetail> {

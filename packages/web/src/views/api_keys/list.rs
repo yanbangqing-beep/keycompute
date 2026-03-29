@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
 
-use crate::services::api_key_service;
+use crate::services::{api_client::with_auto_refresh, api_key_service};
 use crate::stores::auth_store::AuthStore;
 
 #[component]
@@ -15,8 +15,10 @@ pub fn ApiKeyList() -> Element {
 
     // 拉取 key 列表
     let mut keys = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        api_key_service::list(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            api_key_service::list(&token).await
+        })
+        .await
     });
 
     let on_create = move |evt: Event<FormData>| {

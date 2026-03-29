@@ -2,7 +2,10 @@ use client_api::{AdminApi, api::admin::PaymentQueryParams as AdminPaymentQueryPa
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
-use crate::services::{api_client::get_client, payment_service};
+use crate::services::{
+    api_client::{get_client, with_auto_refresh},
+    payment_service,
+};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -28,14 +31,17 @@ pub fn PaymentOrders() -> Element {
         if is_admin {
             return Ok(vec![]);
         }
-        let token = auth_store.token().unwrap_or_default();
         let status = status_filter();
         let params = if status == "all" {
             None
         } else {
             Some(client_api::api::payment::PaymentQueryParams::default())
         };
-        payment_service::list_orders(params, &token).await
+        with_auto_refresh(auth_store, |token| {
+            let value = params.clone();
+            async move { payment_service::list_orders(value, &token).await }
+        })
+        .await
     });
 
     // Admin 订单
@@ -43,17 +49,22 @@ pub fn PaymentOrders() -> Element {
         if !is_admin {
             return Ok(vec![]);
         }
-        let token = auth_store.token().unwrap_or_default();
         let status = status_filter();
-        let client = get_client();
         let params = if status != "all" {
             Some(AdminPaymentQueryParams::new().with_status(status.clone()))
         } else {
             None
         };
-        AdminApi::new(&client)
-            .list_all_payment_orders(params.as_ref(), &token)
-            .await
+        with_auto_refresh(auth_store, |token| {
+            let value = params.clone();
+            async move {
+                let client = get_client();
+                AdminApi::new(&client)
+                    .list_all_payment_orders(value.as_ref(), &token)
+                    .await
+            }
+        })
+        .await
     });
 
     rsx! {

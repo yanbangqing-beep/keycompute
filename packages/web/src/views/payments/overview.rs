@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
 use crate::router::Route;
-use crate::services::payment_service;
+use crate::services::{api_client::with_auto_refresh, payment_service};
 use crate::stores::auth_store::AuthStore;
 
 #[component]
@@ -12,13 +12,17 @@ pub fn PaymentsOverview() -> Element {
     let nav = use_navigator();
 
     let balance = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        payment_service::get_balance(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            payment_service::get_balance(&token).await
+        })
+        .await
     });
 
     let orders = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        payment_service::list_orders(None, &token).await
+        with_auto_refresh(auth_store, |token| async move {
+            payment_service::list_orders(None, &token).await
+        })
+        .await
     });
 
     rsx! {

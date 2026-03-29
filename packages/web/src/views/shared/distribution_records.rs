@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
-use crate::services::distribution_service;
+use crate::services::{api_client::with_auto_refresh, distribution_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -22,8 +22,10 @@ pub fn DistributionRecords() -> Element {
 
     // 收益数据（普通用户）
     let earnings = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        distribution_service::get_earnings(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            distribution_service::get_earnings(&token).await
+        })
+        .await
     });
 
     // Admin 分销记录
@@ -31,13 +33,15 @@ pub fn DistributionRecords() -> Element {
         if !is_admin {
             return Ok(vec![]);
         }
-        let token = auth_store.token().unwrap_or_default();
-        use crate::services::api_client::get_client;
-        use client_api::DistributionApi;
-        let client = get_client();
-        DistributionApi::new(&client)
-            .list_distribution_records(None, &token)
-            .await
+        with_auto_refresh(auth_store, |token| async move {
+            use crate::services::api_client::get_client;
+            use client_api::DistributionApi;
+            let client = get_client();
+            DistributionApi::new(&client)
+                .list_distribution_records(None, &token)
+                .await
+        })
+        .await
     });
 
     let total_earnings = match earnings() {

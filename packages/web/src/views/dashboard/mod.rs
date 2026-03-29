@@ -5,7 +5,7 @@ use ui::{BarChart, BarSeriesData, LineChart, LineSeriesData};
 
 use crate::hooks::use_i18n::use_i18n;
 use crate::router::Route;
-use crate::services::{payment_service, usage_service};
+use crate::services::{api_client::with_auto_refresh, payment_service, usage_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -29,29 +29,37 @@ pub fn Dashboard() -> Element {
 
     // 拉取用量统计
     let usage_stats = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        usage_service::stats(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            usage_service::stats(&token).await
+        })
+        .await
     });
 
     // 拉取账户余额
     let balance = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        payment_service::get_balance(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            payment_service::get_balance(&token).await
+        })
+        .await
     });
 
     // 拉取 API Key 数量（利用展示活跃 Key 数）
     let api_keys = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        crate::services::api_key_service::list(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            crate::services::api_key_service::list(&token).await
+        })
+        .await
     });
 
     // 拉取最近 30 条用量记录，用于图表聚合
     let usage_records = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        usage_service::list(
-            Some(client_api::api::usage::UsageQueryParams::new().with_limit(30)),
-            &token,
-        )
+        with_auto_refresh(auth_store, |token| async move {
+            usage_service::list(
+                Some(client_api::api::usage::UsageQueryParams::new().with_limit(30)),
+                &token,
+            )
+            .await
+        })
         .await
     });
 

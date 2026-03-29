@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
-use crate::services::debug_service;
+use crate::services::{api_client::with_auto_refresh, debug_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::views::shared::accounts::NoPermissionView;
@@ -25,18 +25,24 @@ pub fn System() -> Element {
     }
 
     let provider_health = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        debug_service::provider_health(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            debug_service::provider_health(&token).await
+        })
+        .await
     });
 
     let gateway_stats = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        debug_service::gateway_stats(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            debug_service::gateway_stats(&token).await
+        })
+        .await
     });
 
     let routing_info = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        debug_service::routing(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            debug_service::routing(&token).await
+        })
+        .await
     });
 
     let (total_req, success_rate, avg_latency, active_conns) = match gateway_stats() {

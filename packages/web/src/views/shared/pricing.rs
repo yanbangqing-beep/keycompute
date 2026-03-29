@@ -2,7 +2,7 @@ use client_api::api::admin::CreatePricingRequest;
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
-use crate::services::pricing_service;
+use crate::services::{api_client::with_auto_refresh, pricing_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -31,8 +31,10 @@ pub fn Pricing() -> Element {
 
     let pricing_list = use_resource(move || async move {
         let _tick = refresh_tick();
-        let token = auth_store.token().unwrap_or_default();
-        pricing_service::list(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            pricing_service::list(&token).await
+        })
+        .await
     });
 
     let col_count: u32 = if is_admin { 7 } else { 6 };

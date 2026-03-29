@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
 
-use crate::services::account_service;
+use crate::services::{account_service, api_client::with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -40,8 +40,10 @@ fn AdminAccountsView() -> Element {
     let mut error_msg = use_signal(String::new);
 
     let mut accounts = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        account_service::list(None, &token).await
+        with_auto_refresh(auth_store, |token| async move {
+            account_service::list(None, &token).await
+        })
+        .await
     });
 
     let on_submit = move |_| {

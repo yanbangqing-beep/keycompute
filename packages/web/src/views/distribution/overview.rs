@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::services::distribution_service;
+use crate::services::{api_client::with_auto_refresh, distribution_service};
 use crate::stores::auth_store::AuthStore;
 
 #[component]
@@ -9,20 +9,26 @@ pub fn DistributionOverview() -> Element {
 
     // 收益数据
     let earnings = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        distribution_service::get_earnings(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            distribution_service::get_earnings(&token).await
+        })
+        .await
     });
 
     // 推荐码
     let referral_code = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        distribution_service::get_referral_code(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            distribution_service::get_referral_code(&token).await
+        })
+        .await
     });
 
     // 推荐列表
     let referrals = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        distribution_service::get_referrals(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            distribution_service::get_referrals(&token).await
+        })
+        .await
     });
 
     let total_earnings = match earnings() {

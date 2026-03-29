@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{LineChart, LineSeriesData};
 
-use crate::services::usage_service;
+use crate::services::{api_client::with_auto_refresh, usage_service};
 use crate::stores::auth_store::AuthStore;
 use std::collections::HashMap;
 
@@ -12,17 +12,21 @@ pub fn Usage() -> Element {
 
     // 汇总统计
     let stats = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        usage_service::stats(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            usage_service::stats(&token).await
+        })
+        .await
     });
 
     // 明细记录（最近 50 条）
     let records = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        usage_service::list(
-            Some(client_api::api::usage::UsageQueryParams::new().with_limit(50)),
-            &token,
-        )
+        with_auto_refresh(auth_store, |token| async move {
+            usage_service::list(
+                Some(client_api::api::usage::UsageQueryParams::new().with_limit(50)),
+                &token,
+            )
+            .await
+        })
         .await
     });
 

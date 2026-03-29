@@ -2,7 +2,7 @@ use client_api::api::tenant::TenantInfo;
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Table, TableHead};
 
-use crate::services::tenant_service;
+use crate::services::{api_client::with_auto_refresh, tenant_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::views::shared::accounts::NoPermissionView;
@@ -29,8 +29,10 @@ pub fn Tenants() -> Element {
     let mut search = use_signal(String::new);
 
     let tenants = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        tenant_service::list(None, &token).await
+        with_auto_refresh(auth_store, |token| async move {
+            tenant_service::list(None, &token).await
+        })
+        .await
     });
 
     let filtered = move || -> Vec<TenantInfo> {

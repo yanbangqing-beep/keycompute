@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use ui::{Button, ButtonVariant};
 
-use crate::services::settings_service;
+use crate::services::{api_client::with_auto_refresh, settings_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
@@ -21,8 +21,10 @@ pub fn Settings() -> Element {
         .unwrap_or(false);
 
     let settings = use_resource(move || async move {
-        let token = auth_store.token().unwrap_or_default();
-        settings_service::get_all(&token).await
+        with_auto_refresh(auth_store, |token| async move {
+            settings_service::get_all(&token).await
+        })
+        .await
     });
 
     let save_error = use_signal(String::new);
