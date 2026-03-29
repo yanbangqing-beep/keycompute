@@ -7423,6 +7423,7 @@ version = "0.1.0"
 dependencies = [
  "client-api",
  "dioxus",
+ "gloo-timers",
  "serde_json",
  "ui",
 ]

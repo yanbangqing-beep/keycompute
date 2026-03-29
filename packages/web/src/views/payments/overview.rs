@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Table, TableHead};
 
 use crate::services::payment_service;
 use crate::stores::auth_store::AuthStore;
@@ -56,24 +57,24 @@ pub fn PaymentsOverview() -> Element {
                 div {
                     class: "section-header",
                     h2 { class: "section-title", "充值记录" }
-                    a { class: "btn btn-primary", href: "/payments/recharge", "立即充值" }
+                    a { class: "btn btn-primary", href: "/payments/recharge", "立即充値" }
                 }
                 match orders() {
                     None => rsx! { div { class: "loading-state", "加载中..." } },
                     Some(Err(e)) => rsx! { div { class: "alert alert-error", "加载失败：{e}" } },
                     Some(Ok(list)) => {
                         if list.is_empty() {
-                            rsx! { div { class: "empty-state", p { "暂无充值记录" } } }
+                            rsx! { div { class: "empty-state", p { "暂无充値记录" } } }
                         } else {
                             rsx! {
-                                table {
-                                    class: "table",
+                                Table {
+                                    col_count: 4,
                                     thead {
                                         tr {
-                                            th { "订单号" }
-                                            th { "金额" }
-                                            th { "状态" }
-                                            th { "时间" }
+                                            TableHead { "订单号" }
+                                            TableHead { "金额" }
+                                            TableHead { "状态" }
+                                            TableHead { "时间" }
                                         }
                                     }
                                     tbody {
@@ -83,7 +84,10 @@ pub fn PaymentsOverview() -> Element {
                                                 td { code { "{order.out_trade_no}" } }
                                                 td { "¥ {order.amount:.2}" }
                                                 td {
-                                                    span { class: "badge badge-{order.status}", "{order.status}" }
+                                                    Badge {
+                                                        variant: payment_status_variant(&order.status),
+                                                        "{order.status}"
+                                                    }
                                                 }
                                                 td { "{order.created_at}" }
                                             }
@@ -96,5 +100,15 @@ pub fn PaymentsOverview() -> Element {
                 }
             }
         }
+    }
+}
+
+fn payment_status_variant(status: &str) -> BadgeVariant {
+    match status {
+        "paid" | "success" => BadgeVariant::Success,
+        "pending" | "processing" => BadgeVariant::Warning,
+        "failed" | "cancelled" => BadgeVariant::Error,
+        "refunded" => BadgeVariant::Info,
+        _ => BadgeVariant::Neutral,
     }
 }

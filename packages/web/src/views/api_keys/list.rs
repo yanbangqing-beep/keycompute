@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
 
 use crate::services::api_key_service;
 use crate::stores::auth_store::AuthStore;
@@ -60,8 +61,8 @@ pub fn ApiKeyList() -> Element {
             div {
                 class: "page-header",
                 h1 { class: "page-title", "API Key 管理" }
-                button {
-                    class: "btn btn-primary",
+                Button {
+                    variant: ButtonVariant::Primary,
                     onclick: move |_| {
                         show_create.set(true);
                         new_key_value.set(None);
@@ -76,8 +77,9 @@ pub fn ApiKeyList() -> Element {
                     class: "alert alert-success",
                     p { "API Key 已创建，请妥善保存（仅显示一次）：" }
                     code { class: "key-display", "{key}" }
-                    button {
-                        class: "btn btn-sm btn-ghost",
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Small,
                         onclick: move |_| new_key_value.set(None),
                         "我已记录，关闭"
                     }
@@ -109,16 +111,16 @@ pub fn ApiKeyList() -> Element {
                             }
                             div {
                                 class: "modal-actions",
-                                button {
-                                    class: "btn btn-ghost",
-                                    r#type: "button",
+                                Button {
+                                    variant: ButtonVariant::Ghost,
+                                    r#type: "button".to_string(),
                                     onclick: move |_| show_create.set(false),
                                     "取消"
                                 }
-                                button {
-                                    class: "btn btn-primary",
-                                    r#type: "submit",
-                                    disabled: creating(),
+                                Button {
+                                    variant: ButtonVariant::Primary,
+                                    r#type: "submit".to_string(),
+                                    loading: creating(),
                                     if creating() { "创建中..." } else { "创建" }
                                 }
                             }
@@ -127,58 +129,58 @@ pub fn ApiKeyList() -> Element {
                 }
             }
 
-            div {
-                class: "table-container",
-                match keys() {
-                    None => rsx! {
-                        div { class: "loading-state", "加载中..." }
-                    },
-                    Some(Err(e)) => rsx! {
-                        div { class: "alert alert-error", "加载失败：{e}" }
-                    },
-                    Some(Ok(list)) => {
-                        if list.is_empty() {
-                            rsx! {
-                                div {
-                                    class: "empty-state",
-                                    p { "暂无 API Key，点击上方按钮创建" }
-                                }
+            match keys() {
+                None => rsx! {
+                    div { class: "loading-state", "加载中..." }
+                },
+                Some(Err(e)) => rsx! {
+                    div { class: "alert alert-error", "加载失败：{e}" }
+                },
+                Some(Ok(list)) => {
+                    if list.is_empty() {
+                        rsx! {
+                            Table {
+                                col_count: 5,
+                                empty: true,
+                                empty_text: "暂无 API Key，点击上方按钮创建".to_string(),
+                                thead { tr { TableHead { "" } } }
                             }
-                        } else {
-                            rsx! {
-                                table {
-                                    class: "table",
-                                    thead {
-                                        tr {
-                                            th { "名称" }
-                                            th { "前缀" }
-                                            th { "状态" }
-                                            th { "创建时间" }
-                                            th { "操作" }
-                                        }
+                        }
+                    } else {
+                        rsx! {
+                            Table {
+                                col_count: 5,
+                                thead {
+                                    tr {
+                                        TableHead { "名称" }
+                                        TableHead { "前缀" }
+                                        TableHead { "状态" }
+                                        TableHead { "创建时间" }
+                                        TableHead { "操作" }
                                     }
-                                    tbody {
-                                        for key in list.iter() {
-                                            tr {
-                                                key: "{key.id}",
-                                                td { "{key.name}" }
-                                                td { code { "{key.key_preview}..." } }
-                                                td {
-                                                    span {
-                                                        class: if key.revoked { "badge badge-error" } else { "badge badge-success" },
-                                                        if key.revoked { "已撤销" } else { "活跃" }
-                                                    }
+                                }
+                                tbody {
+                                    for key in list.iter() {
+                                        tr {
+                                            key: "{key.id}",
+                                            td { "{key.name}" }
+                                            td { code { "{key.key_preview}..." } }
+                                            td {
+                                                Badge {
+                                                    variant: if key.revoked { BadgeVariant::Error } else { BadgeVariant::Success },
+                                                    if key.revoked { "已撤销" } else { "活跃" }
                                                 }
-                                                td { "{key.created_at}" }
-                                                td {
-                                                    button {
-                                                        class: "btn btn-sm btn-danger",
-                                                        onclick: {
-                                                            let id = key.id.to_string();
-                                                            move |_| on_delete(id.clone())
-                                                        },
-                                                        "删除"
-                                                    }
+                                            }
+                                            td { "{key.created_at}" }
+                                            td {
+                                                Button {
+                                                    variant: ButtonVariant::Danger,
+                                                    size: ButtonSize::Small,
+                                                    onclick: {
+                                                        let id = key.id.to_string();
+                                                        move |_| on_delete(id.clone())
+                                                    },
+                                                    "删除"
                                                 }
                                             }
                                         }

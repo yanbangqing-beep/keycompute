@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Table, TableHead};
 
+use crate::services::debug_service;
+use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::views::shared::accounts::NoPermissionView;
 
@@ -9,6 +12,7 @@ use crate::views::shared::accounts::NoPermissionView;
 #[component]
 pub fn System() -> Element {
     let user_store = use_context::<UserStore>();
+    let auth_store = use_context::<AuthStore>();
     let is_admin = user_store
         .info
         .read()
@@ -19,6 +23,35 @@ pub fn System() -> Element {
     if !is_admin {
         return rsx! { NoPermissionView { resource: "系统诊断" } };
     }
+
+    let provider_health = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        debug_service::provider_health(&token).await
+    });
+
+    let gateway_stats = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        debug_service::gateway_stats(&token).await
+    });
+
+    let routing_info = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        debug_service::routing(&token).await
+    });
+
+    let (total_req, success_rate, avg_latency, active_conns) = match gateway_stats() {
+        Some(Ok(ref s)) => (
+            s.total_requests.to_string(),
+            format!(
+                "{:.1}%",
+                s.successful_requests as f64 / s.total_requests.max(1) as f64 * 100.0
+            ),
+            format!("{:.0}ms", s.average_latency_ms),
+            s.active_connections.to_string(),
+        ),
+        Some(Err(_)) => ("加载失败".into(), "—".into(), "—".into(), "—".into()),
+        None => ("加载中...".into(), "—".into(), "—".into(), "—".into()),
+    };
 
     rsx! {
         div { class: "page-header",
@@ -31,11 +64,20 @@ pub fn System() -> Element {
             h2 { class: "section-title", "Provider 健康状态" }
             div { class: "card",
                 div { class: "card-body",
-                    div { class: "health-grid",
-                        HealthItem { name: "OpenAI", status: "unknown" }
-                        HealthItem { name: "Azure OpenAI", status: "unknown" }
-                        HealthItem { name: "Anthropic", status: "unknown" }
-                        HealthItem { name: "Google Gemini", status: "unknown" }
+                    match provider_health() {
+                        None => rsx! { p { class: "text-secondary", "加载中..." } },
+                        Some(Err(_)) => rsx! { p { class: "text-secondary", "加载失败" } },
+                        Some(Ok(ref resp)) => rsx! {
+                            div { class: "health-grid",
+                                for (name, health) in resp.providers.iter() {
+                                    HealthItem {
+                                        name: name.clone(),
+                                        status: health.status.clone(),
+                                        latency_ms: health.latency_ms,
+                                    }
+                                }
+                            }
+                        },
                     }
                 }
             }
@@ -48,25 +90,25 @@ pub fn System() -> Element {
                 div { class: "stat-card card",
                     div { class: "card-body",
                         p { class: "stat-label", "总请求数" }
-                        p { class: "stat-value", "—" }
+                        p { class: "stat-value", "{total_req}" }
                     }
                 }
                 div { class: "stat-card card",
                     div { class: "card-body",
                         p { class: "stat-label", "成功率" }
-                        p { class: "stat-value", "—" }
+                        p { class: "stat-value", "{success_rate}" }
                     }
                 }
                 div { class: "stat-card card",
                     div { class: "card-body",
                         p { class: "stat-label", "平均响应时间" }
-                        p { class: "stat-value", "—" }
+                        p { class: "stat-value", "{avg_latency}" }
                     }
                 }
                 div { class: "stat-card card",
                     div { class: "card-body",
-                        p { class: "stat-label", "活跃路由数" }
-                        p { class: "stat-value", "—" }
+                        p { class: "stat-label", "活跃连接数" }
+                        p { class: "stat-value", "{active_conns}" }
                     }
                 }
             }
@@ -78,33 +120,66 @@ pub fn System() -> Element {
             div { class: "card",
                 div { class: "card-header",
                     h3 { class: "card-title", "路由规则列表" }
-                    button { class: "btn btn-secondary btn-sm", r#type: "button",
-                        "刷新"
-                    }
                 }
                 div { class: "card-body",
-                    p { class: "text-secondary", "路由规则数据（对接 DebugApi 后展示）" }
+                    match routing_info() {
+                        None => rsx! { p { class: "text-secondary", "加载中..." } },
+                        Some(Err(_)) => rsx! { p { class: "text-secondary", "加载失败" } },
+                        Some(Ok(ref info)) => rsx! {
+                            {
+                                let is_empty = info.routes.is_empty();
+                                rsx! {
+                                    Table {
+                                        empty: is_empty,
+                                        empty_text: "无路由数据".to_string(),
+                                        col_count: 3,
+                                        thead {
+                                            tr {
+                                                TableHead { "方法" }
+                                                TableHead { "路径" }
+                                                TableHead { "处理器" }
+                                            }
+                                        }
+                                        tbody {
+                                            for r in info.routes.iter() {
+                                                tr {
+                                                    td { Badge { variant: BadgeVariant::Info, "{r.method}" } }
+                                                    td { code { "{r.path}" } }
+                                                    td { "{r.handler}" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    }
                 }
             }
         }
     }
 }
 
-// ── 内部组件 ──────────────────────────────────────────────
+// ── 内部组件 ──────────────────────────────────────────────────────
 
 #[component]
-fn HealthItem(name: String, status: String) -> Element {
+fn HealthItem(name: String, status: String, latency_ms: Option<i64>) -> Element {
     let (status_class, status_text) = match status.as_str() {
-        "healthy" => ("badge-success", "健康"),
-        "degraded" => ("badge-warning", "降级"),
-        "unhealthy" => ("badge-error", "异常"),
-        _ => ("badge-neutral", "未知"),
+        "healthy" => (BadgeVariant::Success, "健康"),
+        "degraded" => (BadgeVariant::Warning, "降级"),
+        "unhealthy" => (BadgeVariant::Error, "异常"),
+        _ => (BadgeVariant::Neutral, "未知"),
     };
 
     rsx! {
         div { class: "health-item",
             div { class: "health-name", "{name}" }
-            span { class: "badge {status_class}", "{status_text}" }
+            div { class: "health-status",
+                Badge { variant: status_class, "{status_text}" }
+                if let Some(ms) = latency_ms {
+                    span { class: "text-secondary text-sm", "{ms}ms" }
+                }
+            }
         }
     }
 }

@@ -42,27 +42,42 @@ impl UiStore {
     }
 
     pub fn show_success(&mut self, title: impl Into<String>) {
-        *self.toast.write() = Some(ToastMsg {
+        let mut toast = self.toast;
+        *toast.write() = Some(ToastMsg {
             kind: ToastKind::Success,
             title: title.into(),
             message: None,
         });
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(3_000).await;
+            *toast.write() = None;
+        });
     }
 
     pub fn show_error(&mut self, title: impl Into<String>) {
-        *self.toast.write() = Some(ToastMsg {
+        let mut toast = self.toast;
+        *toast.write() = Some(ToastMsg {
             kind: ToastKind::Error,
             title: title.into(),
             message: None,
+        });
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(5_000).await;
+            *toast.write() = None;
         });
     }
 
     #[allow(dead_code)]
     pub fn show_error_msg(&mut self, title: impl Into<String>, msg: impl Into<String>) {
-        *self.toast.write() = Some(ToastMsg {
+        let mut toast = self.toast;
+        *toast.write() = Some(ToastMsg {
             kind: ToastKind::Error,
             title: title.into(),
             message: Some(msg.into()),
+        });
+        spawn(async move {
+            gloo_timers::future::TimeoutFuture::new(5_000).await;
+            *toast.write() = None;
         });
     }
 

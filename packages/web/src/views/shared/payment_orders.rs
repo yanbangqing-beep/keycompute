@@ -1,5 +1,9 @@
+use client_api::{AdminApi, api::admin::PaymentQueryParams as AdminPaymentQueryParams};
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Table, TableHead};
 
+use crate::services::{api_client::get_client, payment_service};
+use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
 /// 支付订单页面
@@ -9,6 +13,7 @@ use crate::stores::user_store::UserStore;
 #[component]
 pub fn PaymentOrders() -> Element {
     let user_store = use_context::<UserStore>();
+    let auth_store = use_context::<AuthStore>();
     let is_admin = user_store
         .info
         .read()
@@ -18,12 +23,45 @@ pub fn PaymentOrders() -> Element {
 
     let mut status_filter = use_signal(|| "all".to_string());
 
+    // 普通用户订单
+    let my_orders = use_resource(move || async move {
+        if is_admin {
+            return Ok(vec![]);
+        }
+        let token = auth_store.token().unwrap_or_default();
+        let status = status_filter();
+        let params = if status == "all" {
+            None
+        } else {
+            Some(client_api::api::payment::PaymentQueryParams::default())
+        };
+        payment_service::list_orders(params, &token).await
+    });
+
+    // Admin 订单
+    let admin_orders = use_resource(move || async move {
+        if !is_admin {
+            return Ok(vec![]);
+        }
+        let token = auth_store.token().unwrap_or_default();
+        let status = status_filter();
+        let client = get_client();
+        let params = if status != "all" {
+            Some(AdminPaymentQueryParams::new().with_status(status.clone()))
+        } else {
+            None
+        };
+        AdminApi::new(&client)
+            .list_all_payment_orders(params.as_ref(), &token)
+            .await
+    });
+
     rsx! {
         div { class: "page-header",
             h1 { class: "page-title", "支付订单" }
             p { class: "page-description",
                 if is_admin { "查看和管理平台所有支付订单" }
-                else { "查看您的充值和支付记录" }
+                else { "查看您的充値和支付记录" }
             }
         }
 
@@ -47,27 +85,88 @@ pub fn PaymentOrders() -> Element {
         }
 
         div { class: "card",
-            div { class: "table-container",
-                table { class: "table",
-                    thead {
-                        tr {
-                            th { "订单号" }
-                            th { "金额" }
-                            th { "支付方式" }
-                            th { "状态" }
-                            th { "创建时间" }
-                            if is_admin {
-                                th { "用户" }
-                                th { "操作" }
+            if is_admin {
+                {
+                    let (is_empty, empty_text) = match admin_orders() {
+                        None => (true, "加载中..."),
+                        Some(Err(_)) => (true, "加载失败"),
+                        Some(Ok(ref l)) if l.is_empty() => (true, "暂无订单记录"),
+                        _ => (false, ""),
+                    };
+                    rsx! {
+                        Table {
+                            empty: is_empty,
+                            empty_text: empty_text.to_string(),
+                            col_count: 5,
+                            thead {
+                                tr {
+                                    TableHead { "订单号" }
+                                    TableHead { "用户" }
+                                    TableHead { "金额" }
+                                    TableHead { "状态" }
+                                    TableHead { "创建时间" }
+                                }
+                            }
+                            tbody {
+                                if let Some(Ok(ref list)) = admin_orders() {
+                                    for o in list.iter() {
+                                        tr {
+                                            td { code { "{o.out_trade_no}" } }
+                                            td { "{o.user_id}" }
+                                            td { "¥{o.amount:.2}" }
+                                            td {
+                                                Badge {
+                                                    variant: status_to_variant(&o.status),
+                                                    "{o.status}"
+                                                }
+                                            }
+                                            td { "{o.created_at}" }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                    tbody {
-                        tr {
-                            td {
-                                colspan: if is_admin { "7" } else { "5" },
-                                class: "table-empty",
-                                "暂无订单记录"
+                }
+            } else {
+                {
+                    let (is_empty, empty_text) = match my_orders() {
+                        None => (true, "加载中..."),
+                        Some(Err(_)) => (true, "加载失败"),
+                        Some(Ok(ref l)) if l.is_empty() => (true, "暂无订单记录"),
+                        _ => (false, ""),
+                    };
+                    rsx! {
+                        Table {
+                            empty: is_empty,
+                            empty_text: empty_text.to_string(),
+                            col_count: 5,
+                            thead {
+                                tr {
+                                    TableHead { "订单号" }
+                                    TableHead { "金额" }
+                                    TableHead { "货币" }
+                                    TableHead { "状态" }
+                                    TableHead { "创建时间" }
+                                }
+                            }
+                            tbody {
+                                if let Some(Ok(ref list)) = my_orders() {
+                                    for o in list.iter() {
+                                        tr {
+                                            td { code { "{o.out_trade_no}" } }
+                                            td { "¥{o.amount:.2}" }
+                                            td { "{o.currency}" }
+                                            td {
+                                                Badge {
+                                                    variant: status_to_variant(&o.status),
+                                                    "{o.status}"
+                                                }
+                                            }
+                                            td { "{o.created_at}" }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -76,7 +175,26 @@ pub fn PaymentOrders() -> Element {
         }
 
         div { class: "pagination",
-            span { class: "pagination-info", "共 0 条" }
+            span { class: "pagination-info",
+                {
+                    let count = if is_admin {
+                        admin_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+                    } else {
+                        my_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+                    };
+                    format!("共 {} 条", count)
+                }
+            }
         }
+    }
+}
+
+fn status_to_variant(status: &str) -> BadgeVariant {
+    match status {
+        "paid" | "success" => BadgeVariant::Success,
+        "pending" | "processing" => BadgeVariant::Warning,
+        "failed" | "cancelled" => BadgeVariant::Error,
+        "refunded" => BadgeVariant::Info,
+        _ => BadgeVariant::Neutral,
     }
 }

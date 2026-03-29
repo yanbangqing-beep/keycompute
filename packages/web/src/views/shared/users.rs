@@ -1,11 +1,14 @@
+use client_api::{
+    AdminApi,
+    api::admin::{UserDetail, UserQueryParams},
+};
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
 
+use crate::services::api_client::get_client;
+use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
-/// 用户管理页面
-///
-/// - 普通用户：仅展示自己的信息和编辑入口
-/// - Admin：展示全平台用户列表，支持搜索/状态筛选/批量操作
 #[component]
 pub fn Users() -> Element {
     let user_store = use_context::<UserStore>();
@@ -23,11 +26,37 @@ pub fn Users() -> Element {
     }
 }
 
-// ── Admin 视图 ────────────────────────────────────────────
+// ── Admin 视图 ────────────────────────────────────────────────────────
 
 #[component]
 fn AdminUsersView() -> Element {
+    let auth_store = use_context::<AuthStore>();
     let mut search = use_signal(String::new);
+
+    let users = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        let client = get_client();
+        let params = UserQueryParams::new().with_limit(50);
+        AdminApi::new(&client)
+            .list_all_users(Some(&params), &token)
+            .await
+    });
+
+    let filtered_users = move || -> Vec<UserDetail> {
+        let q = search().to_lowercase();
+        match users() {
+            Some(Ok(ref list)) => list
+                .iter()
+                .filter(|u| {
+                    q.is_empty()
+                        || u.email.to_lowercase().contains(&q)
+                        || u.name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                })
+                .cloned()
+                .collect::<Vec<UserDetail>>(),
+            _ => vec![],
+        }
+    };
 
     rsx! {
         div { class: "page-header",
@@ -35,47 +64,65 @@ fn AdminUsersView() -> Element {
             p { class: "page-description", "查看和管理平台所有注册用户" }
         }
 
-        // 搜索/筛选工具栏
         div { class: "toolbar",
             div { class: "toolbar-left",
                 div { class: "input-wrapper",
                     input {
                         class: "input-field",
                         r#type: "search",
-                        placeholder: "搜索邮箱或用户名...",
+                        placeholder: "搜索邮笱或用户名...",
                         value: "{search}",
                         oninput: move |e| *search.write() = e.value(),
                     }
                 }
             }
             div { class: "toolbar-right",
-                // 预留：导出按钮
-                button { class: "btn btn-secondary btn-sm", r#type: "button",
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    size: ButtonSize::Small,
                     "导出"
                 }
             }
         }
 
-        // 用户表格
         div { class: "card",
-            div { class: "table-container",
-                table { class: "table",
-                    thead {
-                        tr {
-                            th { "用户" }
-                            th { "角色" }
-                            th { "租户" }
-                            th { "注册时间" }
-                            th { "状态" }
-                            th { "操作" }
+            {
+                let (is_empty, empty_text) = match users() {
+                    None => (true, "加载中..."),
+                    Some(Err(_)) => (true, "加载失败"),
+                    Some(Ok(_)) if filtered_users().is_empty() => (true, "暂无用户数据"),
+                    _ => (false, ""),
+                };
+                rsx! {
+                    Table {
+                        empty: is_empty,
+                        empty_text: empty_text.to_string(),
+                        col_count: 4,
+                        thead {
+                            tr {
+                                TableHead { "用户" }
+                                TableHead { "角色" }
+                                TableHead { "租户" }
+                                TableHead { "注册时间" }
+                            }
                         }
-                    }
-                    tbody {
-                        tr {
-                            td {
-                                colspan: "6",
-                                class: "table-empty",
-                                "暂无用户数据"
+                        tbody {
+                            for u in filtered_users().iter() {
+                                tr {
+                                    td {
+                                        div { class: "user-cell",
+                                            span { class: "user-name",
+                                                { u.name.clone().unwrap_or_else(|| u.email.clone()) }
+                                            }
+                                            span { class: "user-email text-secondary", "{u.email}" }
+                                        }
+                                    }
+                                    td {
+                                        Badge { variant: BadgeVariant::Info, "{u.role}" }
+                                    }
+                                    td { "{u.tenant_id}" }
+                                    td { "{u.created_at}" }
+                                }
                             }
                         }
                     }
@@ -83,14 +130,15 @@ fn AdminUsersView() -> Element {
             }
         }
 
-        // 分页
         div { class: "pagination",
-            span { class: "pagination-info", "共 0 条" }
+            span { class: "pagination-info",
+                "共 { filtered_users().len() } 条"
+            }
         }
     }
 }
 
-// ── 普通用户视图 ──────────────────────────────────────────
+// ── 普通用户视图 ──────────────────────────────────────────────────────
 
 #[component]
 fn UserSelfView() -> Element {
@@ -119,7 +167,12 @@ fn UserSelfView() -> Element {
         div { class: "card",
             div { class: "card-header",
                 h3 { class: "card-title", "账户信息" }
-                a { class: "btn btn-secondary btn-sm", href: "/user/profile", "编辑资料" }
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    size: ButtonSize::Small,
+                    onclick: move |_| {},
+                    "编辑资料"
+                }
             }
             div { class: "card-body",
                 div { class: "info-grid",
@@ -128,12 +181,12 @@ fn UserSelfView() -> Element {
                         span { class: "info-value", "{display_name}" }
                     }
                     div { class: "info-item",
-                        span { class: "info-label", "邮箱" }
+                        span { class: "info-label", "邮笱" }
                         span { class: "info-value", "{email}" }
                     }
                     div { class: "info-item",
                         span { class: "info-label", "角色" }
-                        span { class: "badge badge-info", "{role}" }
+                        Badge { variant: BadgeVariant::Info, "{role}" }
                     }
                 }
             }

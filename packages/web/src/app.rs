@@ -48,6 +48,12 @@ pub fn App() -> Element {
 pub fn AppLayout() -> Element {
     let user_store = use_context::<UserStore>();
     let is_admin = user_store.is_admin();
+    let user_name = user_store
+        .info
+        .read()
+        .as_ref()
+        .map(|u| u.display_name().to_string())
+        .unwrap_or_default();
 
     let mut nav_sections = vec![
         NavSection {
@@ -93,6 +99,7 @@ pub fn AppLayout() -> Element {
     rsx! {
         AppShell {
             nav_sections,
+            user_name,
             Toast {}
             Outlet::<Route> {}
         }

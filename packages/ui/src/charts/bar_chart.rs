@@ -80,11 +80,7 @@ pub fn BarChart(props: BarChartProps) -> Element {
 
         // X 轴
         let x_labels: Vec<&str> = x_data.iter().map(String::as_str).collect();
-        chart = chart.x_axis(
-            Axis::new()
-                .type_(AxisType::Category)
-                .data(x_labels),
-        );
+        chart = chart.x_axis(Axis::new().type_(AxisType::Category).data(x_labels));
 
         // Y 轴
         chart = chart.y_axis(Axis::new().type_(AxisType::Value));

@@ -1,5 +1,9 @@
+use client_api::api::tenant::TenantInfo;
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Table, TableHead};
 
+use crate::services::tenant_service;
+use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::views::shared::accounts::NoPermissionView;
 
@@ -10,6 +14,7 @@ use crate::views::shared::accounts::NoPermissionView;
 #[component]
 pub fn Tenants() -> Element {
     let user_store = use_context::<UserStore>();
+    let auth_store = use_context::<AuthStore>();
     let is_admin = user_store
         .info
         .read()
@@ -22,6 +27,27 @@ pub fn Tenants() -> Element {
     }
 
     let mut search = use_signal(String::new);
+
+    let tenants = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        tenant_service::list(None, &token).await
+    });
+
+    let filtered = move || -> Vec<TenantInfo> {
+        let q = search().to_lowercase();
+        match tenants() {
+            Some(Ok(ref list)) => list
+                .iter()
+                .filter(|t| {
+                    q.is_empty()
+                        || t.id.to_lowercase().contains(&q)
+                        || t.name.to_lowercase().contains(&q)
+                })
+                .cloned()
+                .collect::<Vec<_>>(),
+            _ => vec![],
+        }
+    };
 
     rsx! {
         div { class: "page-header",
@@ -43,26 +69,39 @@ pub fn Tenants() -> Element {
             }
         }
 
-        div { class: "card",
-            div { class: "table-container",
-                table { class: "table",
+        {
+            let (is_empty, empty_text) = match tenants() {
+                None => (true, "加载中..."),
+                Some(Err(_)) => (true, "加载失败"),
+                Some(Ok(_)) if filtered().is_empty() => (true, "暂无租户数据"),
+                _ => (false, ""),
+            };
+            rsx! {
+                Table {
+                    empty: is_empty,
+                    empty_text: empty_text.to_string(),
+                    col_count: 4,
                     thead {
                         tr {
-                            th { "租户 ID" }
-                            th { "名称" }
-                            th { "用户数" }
-                            th { "API Key 数" }
-                            th { "余额" }
-                            th { "创建时间" }
-                            th { "状态" }
+                            TableHead { "租户 ID" }
+                            TableHead { "名称" }
+                            TableHead { "状态" }
+                            TableHead { "创建时间" }
                         }
                     }
                     tbody {
-                        tr {
-                            td {
-                                colspan: "7",
-                                class: "table-empty",
-                                "暂无租户数据"
+                        for t in filtered().iter() {
+                            tr {
+                                td { code { "{t.id}" } }
+                                td { "{t.name}" }
+                                td {
+                                    if t.status == "active" {
+                                        Badge { variant: BadgeVariant::Success, "活跃" }
+                                    } else {
+                                        Badge { variant: BadgeVariant::Neutral, "{t.status}" }
+                                    }
+                                }
+                                td { "{t.created_at}" }
                             }
                         }
                     }
@@ -71,7 +110,9 @@ pub fn Tenants() -> Element {
         }
 
         div { class: "pagination",
-            span { class: "pagination-info", "共 0 条" }
+            span { class: "pagination-info",
+                "共 { filtered().len() } 条"
+            }
         }
     }
 }

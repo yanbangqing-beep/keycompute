@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
+use ui::{Badge, BadgeVariant, Table, TableHead};
 
+use crate::services::pricing_service;
+use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 
 /// 定价管理页面
@@ -9,12 +12,18 @@ use crate::stores::user_store::UserStore;
 #[component]
 pub fn Pricing() -> Element {
     let user_store = use_context::<UserStore>();
+    let auth_store = use_context::<AuthStore>();
     let is_admin = user_store
         .info
         .read()
         .as_ref()
         .map(|u| u.is_admin())
         .unwrap_or(false);
+
+    let pricing_list = use_resource(move || async move {
+        let token = auth_store.token().unwrap_or_default();
+        pricing_service::list(&token).await
+    });
 
     rsx! {
         div { class: "page-header",
@@ -25,37 +34,45 @@ pub fn Pricing() -> Element {
             }
         }
 
-        if is_admin {
-            div { class: "toolbar",
-                div { class: "toolbar-right",
-                    button { class: "btn btn-primary btn-sm", r#type: "button",
-                        "+ 新建定价"
-                    }
-                }
-            }
-        }
-
-        div { class: "card",
-            div { class: "table-container",
-                table { class: "table",
+        {
+            let (is_empty, empty_text) = match pricing_list() {
+                None => (true, "加载中..."),
+                Some(Err(_)) => (true, "加载失败"),
+                Some(Ok(ref l)) if l.is_empty() => (true, "暂无定价策略"),
+                _ => (false, ""),
+            };
+            rsx! {
+                Table {
+                    empty: is_empty,
+                    empty_text: empty_text.to_string(),
+                    col_count: 6,
                     thead {
                         tr {
-                            th { "名称" }
-                            th { "描述" }
-                            th { "输入单价（/1K tokens）" }
-                            th { "输出单价（/1K tokens）" }
-                            th { "默认" }
-                            if is_admin {
-                                th { "操作" }
-                            }
+                            TableHead { "模型" }
+                            TableHead { "输入单价（/1K tokens）" }
+                            TableHead { "输出单价（/1K tokens）" }
+                            TableHead { "货币" }
+                            TableHead { "默认" }
+                            TableHead { "创建时间" }
                         }
                     }
                     tbody {
-                        tr {
-                            td {
-                                colspan: if is_admin { "6" } else { "5" },
-                                class: "table-empty",
-                                "暂无定价策略"
+                        if let Some(Ok(ref list)) = pricing_list() {
+                            for p in list.iter() {
+                                tr {
+                                    td { code { "{p.model}" } }
+                                    td { "{p.input_price:.6}" }
+                                    td { "{p.output_price:.6}" }
+                                    td { "{p.currency}" }
+                                    td {
+                                        if p.is_default {
+                                            Badge { variant: BadgeVariant::Success, "默认" }
+                                        } else {
+                                            Badge { variant: BadgeVariant::Neutral, "非默认" }
+                                        }
+                                    }
+                                    td { "{p.created_at}" }
+                                }
                             }
                         }
                     }
