@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use ui::{BarChart, BarSeriesData, LineChart, LineSeriesData};
+use ui::{BarChart, BarSeriesData, LineChart, LineSeriesData, StatCard};
 
 use crate::hooks::use_i18n::use_i18n;
 use crate::router::Route;
@@ -141,27 +141,23 @@ pub fn Dashboard() -> Element {
                 class: "stats-grid",
                 StatCard {
                     title: i18n.t("dashboard.api_calls").to_string(),
-                    value: "{total_requests}",
-                    label: i18n.t("dashboard.weekly_total").to_string(),
-                    icon: "key",
+                    value: total_requests,
+                    description: i18n.t("dashboard.weekly_total").to_string(),
                 }
                 StatCard {
                     title: i18n.t("dashboard.balance").to_string(),
-                    value: "{balance_val}",
-                    label: i18n.t("dashboard.available").to_string(),
-                    icon: "wallet",
+                    value: balance_val,
+                    description: i18n.t("dashboard.available").to_string(),
                 }
                 StatCard {
                     title: i18n.t("dashboard.active_keys").to_string(),
-                    value: "{active_keys}",
-                    label: i18n.t("dashboard.total").to_string(),
-                    icon: "list",
+                    value: active_keys,
+                    description: i18n.t("dashboard.total").to_string(),
                 }
                 StatCard {
                     title: i18n.t("dashboard.weekly_cost").to_string(),
-                    value: "{today_cost}",
-                    label: i18n.t("dashboard.used").to_string(),
-                    icon: "chart",
+                    value: today_cost,
+                    description: i18n.t("dashboard.used").to_string(),
                 }
             }
 
@@ -209,24 +205,6 @@ pub fn Dashboard() -> Element {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-#[component]
-fn StatCard(title: String, value: String, label: String, icon: String) -> Element {
-    rsx! {
-        div {
-            class: "stat-card",
-            div {
-                class: "stat-icon stat-icon-{icon}",
-            }
-            div {
-                class: "stat-body",
-                p { class: "stat-title", "{title}" }
-                p { class: "stat-value", "{value}" }
-                p { class: "stat-label", "{label}" }
             }
         }
     }

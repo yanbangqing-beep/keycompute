@@ -3,6 +3,7 @@ use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHea
 
 use crate::services::{api_client::with_auto_refresh, api_key_service};
 use crate::stores::auth_store::AuthStore;
+use crate::utils::time::format_time;
 
 #[component]
 pub fn ApiKeyList() -> Element {
@@ -173,7 +174,7 @@ pub fn ApiKeyList() -> Element {
                                                     if key.revoked { "已撤销" } else { "活跃" }
                                                 }
                                             }
-                                            td { "{key.created_at}" }
+                                            td { { format_time(&key.created_at) } }
                                             td {
                                                 Button {
                                                     variant: ButtonVariant::Danger,

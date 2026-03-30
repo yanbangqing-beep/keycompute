@@ -5,6 +5,7 @@ use ui::{Badge, BadgeVariant, Table, TableHead};
 use crate::services::{api_client::with_auto_refresh, tenant_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 use crate::views::shared::accounts::NoPermissionView;
 
 /// 租户管理页面（仅 Admin 可访问）
@@ -103,7 +104,7 @@ pub fn Tenants() -> Element {
                                         Badge { variant: BadgeVariant::Neutral, "{t.status}" }
                                     }
                                 }
-                                td { "{t.created_at}" }
+                                td { { format_time(&t.created_at) } }
                             }
                         }
                     }

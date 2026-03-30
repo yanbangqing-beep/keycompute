@@ -8,6 +8,7 @@ use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHea
 use crate::services::api_client::{get_client, with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 
 #[component]
 pub fn Users() -> Element {
@@ -123,7 +124,7 @@ fn AdminUsersView() -> Element {
                                         Badge { variant: BadgeVariant::Info, "{u.role}" }
                                     }
                                     td { "{u.tenant_id}" }
-                                    td { "{u.created_at}" }
+                                    td { { format_time(&u.created_at) } }
                                 }
                             }
                         }

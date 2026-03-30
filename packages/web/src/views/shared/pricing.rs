@@ -5,6 +5,7 @@ use ui::{Badge, BadgeVariant, Table, TableHead};
 use crate::services::{api_client::with_auto_refresh, pricing_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 
 /// 定价管理页面
 ///
@@ -105,7 +106,7 @@ pub fn Pricing() -> Element {
                                                 Badge { variant: BadgeVariant::Neutral, "非默认" }
                                             }
                                         }
-                                        td { "{p.created_at}" }
+                                        td { { format_time(&p.created_at) } }
                                         if is_admin {
                                             td {
                                                 div { class: "action-buttons",

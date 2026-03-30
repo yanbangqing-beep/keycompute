@@ -4,6 +4,7 @@ use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHea
 use crate::services::{account_service, api_client::with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 
 /// 账号管理页面（LLM 渠道配置）
 ///
@@ -132,7 +133,7 @@ fn AdminAccountsView() -> Element {
                                             Badge { variant: BadgeVariant::Neutral, "已禁用" }
                                         }
                                     }
-                                    td { "{acc.created_at}" }
+                                    td { { format_time(&acc.created_at) } }
                                     td {
                                         div { class: "btn-group",
                                             Button {

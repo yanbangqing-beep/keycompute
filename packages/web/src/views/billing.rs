@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use crate::router::Route;
 use crate::services::{api_client::with_auto_refresh, billing_service};
 use crate::stores::auth_store::AuthStore;
+use crate::utils::time::{format_time, format_time_opt};
 
 /// 账单页面 - /billing
 #[component]
@@ -96,7 +97,7 @@ pub fn Billing() -> Element {
                                 tbody {
                                     for r in recs {
                                         tr {
-                                            td { "{r.created_at}" }
+                                            td { { format_time(&r.created_at) } }
                                             td { "{r.amount:.4}" }
                                             td { "{r.currency}" }
                                             td { { r.description.as_deref().unwrap_or("—") } }
@@ -106,7 +107,7 @@ pub fn Billing() -> Element {
                                                     "{r.status}"
                                                 }
                                             }
-                                            td { { r.paid_at.as_deref().unwrap_or("—") } }
+                                            td { { format_time_opt(r.paid_at.as_deref()) } }
                                         }
                                     }
                                 }

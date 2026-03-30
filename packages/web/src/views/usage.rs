@@ -3,6 +3,7 @@ use ui::{LineChart, LineSeriesData};
 
 use crate::services::{api_client::with_auto_refresh, usage_service};
 use crate::stores::auth_store::AuthStore;
+use crate::utils::time::format_time;
 use std::collections::HashMap;
 
 /// 用量统计页面 - /usage
@@ -137,7 +138,7 @@ pub fn Usage() -> Element {
                                 tbody {
                                     for r in recs {
                                         tr {
-                                            td { "{r.created_at}" }
+                                            td { { format_time(&r.created_at) } }
                                             td { "{r.model}" }
                                             td { "{r.prompt_tokens}" }
                                             td { "{r.completion_tokens}" }

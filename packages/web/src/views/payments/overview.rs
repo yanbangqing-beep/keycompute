@@ -4,6 +4,7 @@ use ui::{Badge, BadgeVariant, Table, TableHead};
 use crate::router::Route;
 use crate::services::{api_client::with_auto_refresh, payment_service};
 use crate::stores::auth_store::AuthStore;
+use crate::utils::time::format_time;
 
 #[component]
 pub fn PaymentsOverview() -> Element {
@@ -100,7 +101,7 @@ pub fn PaymentsOverview() -> Element {
                                                         "{order.status}"
                                                     }
                                                 }
-                                                td { "{order.created_at}" }
+                                                td { { format_time(&order.created_at) } }
                                             }
                                         }
                                     }

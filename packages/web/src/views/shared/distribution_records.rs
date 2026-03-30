@@ -4,10 +4,11 @@ use ui::{Badge, BadgeVariant, Table, TableHead};
 use crate::services::{api_client::with_auto_refresh, distribution_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 
 /// 分销记录页面
 ///
-/// - 普通用户：仅查看自己的分销收益记录
+/// - 普通用户：查看自己的推荐用户明细（真实表格数据）
 /// - Admin：查看全平台分销记录，配置分销规则
 #[component]
 pub fn DistributionRecords() -> Element {
@@ -28,7 +29,18 @@ pub fn DistributionRecords() -> Element {
         .await
     });
 
-    // Admin 分销记录
+    // 普通用户：推荐明细列表
+    let referrals = use_resource(move || async move {
+        if is_admin {
+            return Ok(vec![]);
+        }
+        with_auto_refresh(auth_store, |token| async move {
+            distribution_service::get_referrals(&token).await
+        })
+        .await
+    });
+
+    // Admin：全平台分销记录
     let admin_records = use_resource(move || async move {
         if !is_admin {
             return Ok(vec![]);
@@ -89,7 +101,6 @@ pub fn DistributionRecords() -> Element {
         }
 
         if is_admin {
-            // Admin 工具栏：规则配置入口
             div { class: "toolbar",
                 div { class: "toolbar-right",
                     button { class: "btn btn-secondary btn-sm", r#type: "button",
@@ -99,37 +110,32 @@ pub fn DistributionRecords() -> Element {
             }
         }
 
-        {
-            let (is_empty, empty_text, col) = if is_admin {
-                match admin_records() {
-                    None => (true, "加载中...", 7u32),
-                    Some(Err(_)) => (true, "加载失败", 7),
-                    Some(Ok(ref l)) if l.is_empty() => (true, "暂无分销记录", 7),
-                    _ => (false, "", 7),
-                }
-            } else {
-                (true, "暂无分销记录", 6u32)
-            };
-            rsx! {
-                Table {
-                    empty: is_empty,
-                    empty_text: empty_text.to_string(),
-                    col_count: col,
-                    thead {
-                        tr {
-                            TableHead { "记录编号" }
-                            TableHead { "来源用户" }
-                            TableHead { "消费金额" }
-                            TableHead { "分销金额" }
-                            TableHead { "状态" }
-                            TableHead { "创建时间" }
-                            if is_admin {
+        // 表格：admin 视图 / 普通用户视图分别渲染
+        if is_admin {
+            {
+                let (is_empty, empty_text) = match admin_records() {
+                    None => (true, "加载中..."),
+                    Some(Err(_)) => (true, "加载失败"),
+                    Some(Ok(ref l)) if l.is_empty() => (true, "暂无分销记录"),
+                    _ => (false, ""),
+                };
+                rsx! {
+                    Table {
+                        empty: is_empty,
+                        empty_text: empty_text.to_string(),
+                        col_count: 7u32,
+                        thead {
+                            tr {
+                                TableHead { "记录编号" }
+                                TableHead { "来源用户" }
+                                TableHead { "消费金额" }
+                                TableHead { "分销金额" }
+                                TableHead { "状态" }
+                                TableHead { "创建时间" }
                                 TableHead { "推荐人" }
                             }
                         }
-                    }
-                    tbody {
-                        if is_admin {
+                        tbody {
                             if let Some(Ok(ref list)) = admin_records() {
                                 for rec in list.iter() {
                                     tr {
@@ -143,8 +149,51 @@ pub fn DistributionRecords() -> Element {
                                                 "{rec.status}"
                                             }
                                         }
-                                        td { "{rec.created_at}" }
+                                        td { { format_time(&rec.created_at) } }
                                         td { "{rec.referrer_id}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            {
+                let (is_empty, empty_text) = match referrals() {
+                    None => (true, "加载中..."),
+                    Some(Err(_)) => (true, "加载失败"),
+                    Some(Ok(ref l)) if l.is_empty() => (true, "暂无推荐记录"),
+                    _ => (false, ""),
+                };
+                rsx! {
+                    Table {
+                        empty: is_empty,
+                        empty_text: empty_text.to_string(),
+                        col_count: 4u32,
+                        thead {
+                            tr {
+                                TableHead { "被推荐用户" }
+                                TableHead { "加入时间" }
+                                TableHead { "消费总额" }
+                                TableHead { "我的收益" }
+                            }
+                        }
+                        tbody {
+                            if let Some(Ok(ref list)) = referrals() {
+                                for r in list.iter() {
+                                    tr {
+                                        td {
+                                            div { class: "user-cell",
+                                                span { class: "user-name",
+                                                    { r.name.clone().unwrap_or_else(|| r.email.clone()) }
+                                                }
+                                                span { class: "user-email text-secondary", "{r.email}" }
+                                            }
+                                        }
+                                        td { { format_time(&r.joined_at) } }
+                                        td { "¥{r.total_spent:.2}" }
+                                        td { "¥{r.earnings_from_referral:.2}" }
                                     }
                                 }
                             }
@@ -160,11 +209,7 @@ pub fn DistributionRecords() -> Element {
                     let count = if is_admin {
                         admin_records().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
                     } else {
-                        // 普通用户从收益统计中取推荐人数
-                        earnings()
-                            .and_then(|r| r.ok())
-                            .map(|e| e.referral_count.max(0) as usize)
-                            .unwrap_or(0)
+                        referrals().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
                     };
                     format!("共 {} 条", count)
                 }

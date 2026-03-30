@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 use crate::services::{api_client::with_auto_refresh, distribution_service};
 use crate::stores::auth_store::AuthStore;
+use crate::utils::time::format_time;
 
 #[component]
 pub fn DistributionOverview() -> Element {
@@ -149,7 +150,7 @@ pub fn DistributionOverview() -> Element {
                                                     span { class: "user-email", "{r.email}" }
                                                 }
                                             }
-                                            td { "{r.joined_at}" }
+                                            td { { format_time(&r.joined_at) } }
                                             td { "¥{r.total_spent:.2}" }
                                             td { "¥{r.earnings_from_referral:.2}" }
                                         }

@@ -8,6 +8,7 @@ mod i18n;
 mod router;
 mod services;
 mod stores;
+mod utils;
 mod views;
 
 use app::App;

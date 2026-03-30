@@ -8,6 +8,7 @@ use crate::services::{
 };
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
+use crate::utils::time::format_time;
 
 /// 支付订单页面
 ///
@@ -131,7 +132,7 @@ pub fn PaymentOrders() -> Element {
                                                     "{o.status}"
                                                 }
                                             }
-                                            td { "{o.created_at}" }
+                                            td { { format_time(&o.created_at) } }
                                         }
                                     }
                                 }
@@ -174,7 +175,7 @@ pub fn PaymentOrders() -> Element {
                                                     "{o.status}"
                                                 }
                                             }
-                                            td { "{o.created_at}" }
+                                            td { { format_time(&o.created_at) } }
                                         }
                                     }
                                 }
