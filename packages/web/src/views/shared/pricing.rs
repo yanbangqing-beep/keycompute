@@ -1,6 +1,8 @@
 use client_api::api::admin::CreatePricingRequest;
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{api_client::with_auto_refresh, pricing_service};
 use crate::stores::auth_store::AuthStore;
@@ -29,6 +31,8 @@ pub fn Pricing() -> Element {
     let mut op_err = use_signal(String::new);
     // 刷新触发器
     let mut refresh_tick = use_signal(|| 0u32);
+    // 分页
+    let mut page = use_signal(|| 1u32);
 
     let pricing_list = use_resource(move || async move {
         let _tick = refresh_tick();
@@ -72,6 +76,13 @@ pub fn Pricing() -> Element {
                     Some(Ok(ref l)) if l.is_empty() => (true, "暂无定价策略"),
                     _ => (false, ""),
                 };
+                let total = pricing_list().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0);
+                let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+                let start = (page() as usize - 1) * PAGE_SIZE;
+                let paged_list: Vec<_> = pricing_list()
+                    .and_then(|r| r.ok())
+                    .map(|l| l.into_iter().skip(start).take(PAGE_SIZE).collect())
+                    .unwrap_or_default();
                 rsx! {
                     Table {
                         empty: is_empty,
@@ -91,8 +102,8 @@ pub fn Pricing() -> Element {
                             }
                         }
                         tbody {
-                            if let Some(Ok(ref list)) = pricing_list() {
-                                for p in list.iter() {
+                            if pricing_list().and_then(|r| r.ok()).is_some() {
+                                for p in paged_list.iter() {
                                     tr {
                                         key: "{p.id}",
                                         td { code { "{p.model}" } }
@@ -110,7 +121,6 @@ pub fn Pricing() -> Element {
                                         if is_admin {
                                             td {
                                                 div { class: "action-buttons",
-                                                    // 设置默认按钮（非默认时才显示）
                                                     if !p.is_default {
                                                         {
                                                             let pid = p.id.clone();
@@ -140,7 +150,6 @@ pub fn Pricing() -> Element {
                                                             }
                                                         }
                                                     }
-                                                    // 删除按钮
                                                     {
                                                         let pid = p.id.clone();
                                                         rsx! {
@@ -174,6 +183,14 @@ pub fn Pricing() -> Element {
                             }
                         }
                     }
+                    div { class: "pagination",
+                        span { class: "pagination-info", "共 {total} 条" }
+                        Pagination {
+                            current: page(),
+                            total_pages,
+                            on_page_change: move |p| page.set(p),
+                        }
+                    }
                 }
             }
 
@@ -186,6 +203,7 @@ pub fn Pricing() -> Element {
                         show_create.set(false);
                         op_ok.set("定价创建成功".to_string());
                         op_err.set(String::new());
+                        page.set(1);
                         *refresh_tick.write() += 1;
                     },
                 }

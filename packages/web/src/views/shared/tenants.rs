@@ -1,6 +1,8 @@
 use client_api::api::tenant::TenantInfo;
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{api_client::with_auto_refresh, tenant_service};
 use crate::stores::auth_store::AuthStore;
@@ -28,6 +30,7 @@ pub fn Tenants() -> Element {
     }
 
     let mut search = use_signal(String::new);
+    let mut page = use_signal(|| 1u32);
 
     let tenants = use_resource(move || async move {
         with_auto_refresh(auth_store, |token| async move {
@@ -52,6 +55,21 @@ pub fn Tenants() -> Element {
         }
     };
 
+    let total_pages = move || {
+        let len = filtered().len();
+        len.div_ceil(PAGE_SIZE).max(1) as u32
+    };
+
+    let paged = move || {
+        let p = page() as usize;
+        let all = filtered();
+        let start = (p - 1) * PAGE_SIZE;
+        all.into_iter()
+            .skip(start)
+            .take(PAGE_SIZE)
+            .collect::<Vec<_>>()
+    };
+
     rsx! {
         div { class: "page-header",
             h1 { class: "page-title", "租户管理" }
@@ -66,7 +84,10 @@ pub fn Tenants() -> Element {
                         r#type: "search",
                         placeholder: "搜索租户名称或 ID...",
                         value: "{search}",
-                        oninput: move |e| *search.write() = e.value(),
+                        oninput: move |e| {
+                            *search.write() = e.value();
+                            page.set(1);
+                        },
                     }
                 }
             }
@@ -93,7 +114,7 @@ pub fn Tenants() -> Element {
                         }
                     }
                     tbody {
-                        for t in filtered().iter() {
+                        for t in paged().iter() {
                             tr {
                                 td { code { "{t.id}" } }
                                 td { "{t.name}" }
@@ -115,6 +136,11 @@ pub fn Tenants() -> Element {
         div { class: "pagination",
             span { class: "pagination-info",
                 "共 { filtered().len() } 条"
+            }
+            Pagination {
+                current: page(),
+                total_pages: total_pages(),
+                on_page_change: move |p| page.set(p),
             }
         }
     }

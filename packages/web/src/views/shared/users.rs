@@ -3,12 +3,14 @@ use client_api::{
     api::admin::{UserDetail, UserQueryParams},
 };
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Pagination, Table, TableHead};
 
 use crate::services::api_client::{get_client, with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::utils::time::format_time;
+
+const PAGE_SIZE: usize = 20;
 
 #[component]
 pub fn Users() -> Element {
@@ -33,6 +35,7 @@ pub fn Users() -> Element {
 fn AdminUsersView() -> Element {
     let auth_store = use_context::<AuthStore>();
     let mut search = use_signal(String::new);
+    let mut page = use_signal(|| 1u32);
 
     let users = use_resource(move || async move {
         with_auto_refresh(auth_store, |token| async move {
@@ -61,6 +64,21 @@ fn AdminUsersView() -> Element {
         }
     };
 
+    let total_pages = move || {
+        let len = filtered_users().len();
+        len.div_ceil(PAGE_SIZE).max(1) as u32
+    };
+
+    let paged_users = move || {
+        let p = page() as usize;
+        let all = filtered_users();
+        let start = (p - 1) * PAGE_SIZE;
+        all.into_iter()
+            .skip(start)
+            .take(PAGE_SIZE)
+            .collect::<Vec<_>>()
+    };
+
     rsx! {
         div { class: "page-header",
             h1 { class: "page-title", "用户管理" }
@@ -75,7 +93,10 @@ fn AdminUsersView() -> Element {
                         r#type: "search",
                         placeholder: "搜索邮笱或用户名...",
                         value: "{search}",
-                        oninput: move |e| *search.write() = e.value(),
+                        oninput: move |e| {
+                                    *search.write() = e.value();
+                                    page.set(1);
+                                },
                     }
                 }
             }
@@ -110,7 +131,7 @@ fn AdminUsersView() -> Element {
                             }
                         }
                         tbody {
-                            for u in filtered_users().iter() {
+                            for u in paged_users().iter() {
                                 tr {
                                     td {
                                         div { class: "user-cell",
@@ -136,6 +157,11 @@ fn AdminUsersView() -> Element {
         div { class: "pagination",
             span { class: "pagination-info",
                 "共 { filtered_users().len() } 条"
+            }
+            Pagination {
+                current: page(),
+                total_pages: total_pages(),
+                on_page_change: move |p| page.set(p),
             }
         }
     }

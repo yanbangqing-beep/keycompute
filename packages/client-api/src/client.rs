@@ -123,10 +123,59 @@ impl ApiClient {
         self.send_and_parse(builder).await
     }
 
-    /// 发送请求并解析 JSON 响应
+    /// 发送请求并解析 JSON 响应（含重试逻辑）
+    ///
+    /// 重试条件：网络/连接错误、服务器 5xx、限流 429
+    /// 每次重试使用 `try_clone` 克隆 builder，无需外部依赖
     async fn send_and_parse<T: DeserializeOwned>(&self, builder: RequestBuilder) -> Result<T> {
-        let response = builder.send().await.map_err(ClientError::from)?;
-        self.handle_response(response).await
+        let max_retries = if self.inner.config.retry_enabled {
+            self.inner.config.max_retries
+        } else {
+            0
+        };
+
+        // 带 streaming body 的 builder 无法克隆，直接发送不重试
+        if max_retries > 0 && builder.try_clone().is_none() {
+            let response = builder.send().await.map_err(ClientError::from)?;
+            return self.handle_response(response).await;
+        }
+
+        let mut last_err: Option<ClientError> = None;
+        for attempt in 0..=max_retries {
+            // 每次使用克隆的 builder，保留原始供后续重试
+            let req = match builder.try_clone() {
+                Some(cloned) => cloned,
+                None => break,
+            };
+
+            match req.send().await.map_err(ClientError::from) {
+                Ok(response) => match self.handle_response::<T>(response).await {
+                    Ok(result) => return Ok(result),
+                    Err(e) if self.should_retry(&e) && attempt < max_retries => {
+                        last_err = Some(e);
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                },
+                Err(e) if self.should_retry(&e) && attempt < max_retries => {
+                    last_err = Some(e);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Err(last_err.unwrap_or(ClientError::Other(
+            "Request failed after retries".to_string(),
+        )))
+    }
+
+    /// 判断错误是否值得重试
+    fn should_retry(&self, err: &ClientError) -> bool {
+        matches!(
+            err,
+            ClientError::Network(_) | ClientError::ServerError(_) | ClientError::RateLimited(_)
+        )
     }
 
     /// 处理响应

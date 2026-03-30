@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{api_client::with_auto_refresh, distribution_service};
 use crate::stores::auth_store::AuthStore;
@@ -69,6 +71,8 @@ pub fn DistributionRecords() -> Element {
         _ => "¥ 0.00".to_string(),
     };
 
+    let mut page = use_signal(|| 1u32);
+
     rsx! {
         div { class: "page-header",
             h1 { class: "page-title", "分销记录" }
@@ -119,6 +123,7 @@ pub fn DistributionRecords() -> Element {
                     Some(Ok(ref l)) if l.is_empty() => (true, "暂无分销记录"),
                     _ => (false, ""),
                 };
+                let admin_start = (page() as usize - 1) * PAGE_SIZE;
                 rsx! {
                     Table {
                         empty: is_empty,
@@ -137,7 +142,7 @@ pub fn DistributionRecords() -> Element {
                         }
                         tbody {
                             if let Some(Ok(ref list)) = admin_records() {
-                                for rec in list.iter() {
+                                for rec in list.iter().skip(admin_start).take(PAGE_SIZE) {
                                     tr {
                                         td { code { "{rec.id}" } }
                                         td { "{rec.referred_id}" }
@@ -166,6 +171,7 @@ pub fn DistributionRecords() -> Element {
                     Some(Ok(ref l)) if l.is_empty() => (true, "暂无推荐记录"),
                     _ => (false, ""),
                 };
+                let ref_start = (page() as usize - 1) * PAGE_SIZE;
                 rsx! {
                     Table {
                         empty: is_empty,
@@ -181,7 +187,7 @@ pub fn DistributionRecords() -> Element {
                         }
                         tbody {
                             if let Some(Ok(ref list)) = referrals() {
-                                for r in list.iter() {
+                                for r in list.iter().skip(ref_start).take(PAGE_SIZE) {
                                     tr {
                                         td {
                                             div { class: "user-cell",
@@ -203,15 +209,21 @@ pub fn DistributionRecords() -> Element {
             }
         }
 
-        div { class: "pagination",
-            span { class: "pagination-info",
-                {
-                    let count = if is_admin {
-                        admin_records().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
-                    } else {
-                        referrals().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
-                    };
-                    format!("共 {} 条", count)
+        {
+            let total = if is_admin {
+                admin_records().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+            } else {
+                referrals().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+            };
+            let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+            rsx! {
+                div { class: "pagination",
+                    span { class: "pagination-info", "共 {total} 条" }
+                    Pagination {
+                        current: page(),
+                        total_pages,
+                        on_page_change: move |p| page.set(p),
+                    }
                 }
             }
         }

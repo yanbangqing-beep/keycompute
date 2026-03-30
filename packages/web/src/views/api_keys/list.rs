@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{api_client::with_auto_refresh, api_key_service};
 use crate::stores::auth_store::AuthStore;
@@ -12,7 +14,8 @@ pub fn ApiKeyList() -> Element {
     let mut new_key_name = use_signal(String::new);
     let mut creating = use_signal(|| false);
     let mut create_error = use_signal(|| Option::<String>::None);
-    let mut new_key_value = use_signal(|| Option::<String>::None); // 新建成功后展示一次完整 key
+    let mut new_key_value = use_signal(|| Option::<String>::None);
+    let mut page = use_signal(|| 1u32);
 
     // 拉取 key 列表
     let mut keys = use_resource(move || async move {
@@ -38,6 +41,7 @@ pub fn ApiKeyList() -> Element {
                     show_create.set(false);
                     new_key_name.set(String::new());
                     creating.set(false);
+                    page.set(1);
                     // 重新拉取列表
                     keys.restart();
                 }
@@ -140,7 +144,11 @@ pub fn ApiKeyList() -> Element {
                     div { class: "alert alert-error", "加载失败：{e}" }
                 },
                 Some(Ok(list)) => {
-                    if list.is_empty() {
+                    let total = list.len();
+                    let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+                    let start = (page() as usize - 1) * PAGE_SIZE;
+                    let paged: Vec<_> = list.iter().skip(start).take(PAGE_SIZE).collect();
+                    if paged.is_empty() && total == 0 {
                         rsx! {
                             Table {
                                 col_count: 5,
@@ -163,7 +171,7 @@ pub fn ApiKeyList() -> Element {
                                     }
                                 }
                                 tbody {
-                                    for key in list.iter() {
+                                    for key in paged.iter() {
                                         tr {
                                             key: "{key.id}",
                                             td { "{key.name}" }
@@ -188,6 +196,14 @@ pub fn ApiKeyList() -> Element {
                                             }
                                         }
                                     }
+                                }
+                            }
+                            div { class: "pagination",
+                                span { class: "pagination-info", "共 {total} 条" }
+                                Pagination {
+                                    current: page(),
+                                    total_pages,
+                                    on_page_change: move |p| page.set(p),
                                 }
                             }
                         }

@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use ui::{LineChart, LineSeriesData};
+use ui::{LineChart, LineSeriesData, Pagination};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{api_client::with_auto_refresh, usage_service};
 use crate::stores::auth_store::AuthStore;
@@ -10,6 +12,7 @@ use std::collections::HashMap;
 #[component]
 pub fn Usage() -> Element {
     let auth_store = use_context::<AuthStore>();
+    let mut page = use_signal(|| 1u32);
 
     // 汇总统计
     let stats = use_resource(move || async move {
@@ -136,23 +139,42 @@ pub fn Usage() -> Element {
                                     }
                                 }
                                 tbody {
-                                    for r in recs {
-                                        tr {
-                                            td { { format_time(&r.created_at) } }
-                                            td { "{r.model}" }
-                                            td { "{r.prompt_tokens}" }
-                                            td { "{r.completion_tokens}" }
-                                            td { "{r.total_tokens}" }
-                                            td {
-                                                {
-                                                    if let Some(c) = r.cost {
-                                                        format!("¥{c:.6}")
-                                                    } else {
-                                                        "—".to_string()
+                                    {
+                                        let start = (page() as usize - 1) * PAGE_SIZE;
+                                        rsx! {
+                                            for r in recs.iter().skip(start).take(PAGE_SIZE) {
+                                                tr {
+                                                    td { { format_time(&r.created_at) } }
+                                                    td { "{r.model}" }
+                                                    td { "{r.prompt_tokens}" }
+                                                    td { "{r.completion_tokens}" }
+                                                    td { "{r.total_tokens}" }
+                                                    td {
+                                                        {
+                                                            if let Some(c) = r.cost {
+                                                                format!("¥{c:.6}")
+                                                            } else {
+                                                                "—".to_string()
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                        {
+                            let total = recs.len();
+                            let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+                            rsx! {
+                                div { class: "pagination",
+                                    span { class: "pagination-info", "共 {total} 条" }
+                                    Pagination {
+                                        current: page(),
+                                        total_pages,
+                                        on_page_change: move |p| page.set(p),
                                     }
                                 }
                             }

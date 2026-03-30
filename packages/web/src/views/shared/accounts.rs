@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{account_service, api_client::with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
@@ -39,6 +41,7 @@ fn AdminAccountsView() -> Element {
     let mut create_api_base = use_signal(String::new);
     let mut saving = use_signal(|| false);
     let mut error_msg = use_signal(String::new);
+    let mut page = use_signal(|| 1u32);
 
     let mut accounts = use_resource(move || async move {
         with_auto_refresh(auth_store, |token| async move {
@@ -72,6 +75,7 @@ fn AdminAccountsView() -> Element {
                     create_provider.write().clear();
                     create_api_key.write().clear();
                     create_api_base.write().clear();
+                    page.set(1);
                     accounts.restart();
                 }
                 Err(e) => {
@@ -106,6 +110,13 @@ fn AdminAccountsView() -> Element {
                 Some(Ok(ref l)) if l.is_empty() => (true, "暂无渠道配置，请点击「新增渠道」添加"),
                 _ => (false, ""),
             };
+            let total = accounts().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0);
+            let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+            let start = (page() as usize - 1) * PAGE_SIZE;
+            let paged_list: Vec<_> = accounts()
+                .and_then(|r| r.ok())
+                .map(|l| l.into_iter().skip(start).take(PAGE_SIZE).collect())
+                .unwrap_or_default();
             rsx! {
                 Table {
                     empty: is_empty,
@@ -121,8 +132,8 @@ fn AdminAccountsView() -> Element {
                         }
                     }
                     tbody {
-                        if let Some(Ok(ref list)) = accounts() {
-                            for acc in list.iter() {
+                        if accounts().and_then(|r| r.ok()).is_some() {
+                            for acc in paged_list.iter() {
                                 tr {
                                     td { "{acc.name}" }
                                     td { "{acc.provider}" }
@@ -173,6 +184,14 @@ fn AdminAccountsView() -> Element {
                                 }
                             }
                         }
+                    }
+                }
+                div { class: "pagination",
+                    span { class: "pagination-info", "共 {total} 条" }
+                    Pagination {
+                        current: page(),
+                        total_pages,
+                        on_page_change: move |p| page.set(p),
                     }
                 }
             }

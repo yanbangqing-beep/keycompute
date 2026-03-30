@@ -1,6 +1,8 @@
 use client_api::{AdminApi, api::admin::PaymentQueryParams as AdminPaymentQueryParams};
 use dioxus::prelude::*;
-use ui::{Badge, BadgeVariant, Table, TableHead};
+use ui::{Badge, BadgeVariant, Pagination, Table, TableHead};
+
+const PAGE_SIZE: usize = 20;
 
 use crate::services::{
     api_client::{get_client, with_auto_refresh},
@@ -26,6 +28,7 @@ pub fn PaymentOrders() -> Element {
         .unwrap_or(false);
 
     let mut status_filter = use_signal(|| "all".to_string());
+    let mut page = use_signal(|| 1u32);
 
     // 普通用户订单
     let my_orders = use_resource(move || async move {
@@ -87,7 +90,10 @@ pub fn PaymentOrders() -> Element {
                             r#type: "button",
                             onclick: {
                                 let val = val.to_string();
-                                move |_| *status_filter.write() = val.clone()
+                                move |_| {
+                                        *status_filter.write() = val.clone();
+                                        page.set(1);
+                                    }
                             },
                             "{label}"
                         }
@@ -105,6 +111,7 @@ pub fn PaymentOrders() -> Element {
                         Some(Ok(ref l)) if l.is_empty() => (true, "暂无订单记录"),
                         _ => (false, ""),
                     };
+                    let admin_start = (page() as usize - 1) * PAGE_SIZE;
                     rsx! {
                         Table {
                             empty: is_empty,
@@ -121,7 +128,7 @@ pub fn PaymentOrders() -> Element {
                             }
                             tbody {
                                 if let Some(Ok(ref list)) = admin_orders() {
-                                    for o in list.iter() {
+                                    for o in list.iter().skip(admin_start).take(PAGE_SIZE) {
                                         tr {
                                             td { code { "{o.out_trade_no}" } }
                                             td { "{o.user_id}" }
@@ -148,6 +155,7 @@ pub fn PaymentOrders() -> Element {
                         Some(Ok(ref l)) if l.is_empty() => (true, "暂无订单记录"),
                         _ => (false, ""),
                     };
+                    let my_start = (page() as usize - 1) * PAGE_SIZE;
                     rsx! {
                         Table {
                             empty: is_empty,
@@ -164,7 +172,7 @@ pub fn PaymentOrders() -> Element {
                             }
                             tbody {
                                 if let Some(Ok(ref list)) = my_orders() {
-                                    for o in list.iter() {
+                                    for o in list.iter().skip(my_start).take(PAGE_SIZE) {
                                         tr {
                                             td { code { "{o.out_trade_no}" } }
                                             td { "¥{o.amount:.2}" }
@@ -186,15 +194,21 @@ pub fn PaymentOrders() -> Element {
             }
         }
 
-        div { class: "pagination",
-            span { class: "pagination-info",
-                {
-                    let count = if is_admin {
-                        admin_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
-                    } else {
-                        my_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
-                    };
-                    format!("共 {} 条", count)
+        {
+            let total = if is_admin {
+                admin_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+            } else {
+                my_orders().and_then(|r| r.ok()).map(|l| l.len()).unwrap_or(0)
+            };
+            let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+            rsx! {
+                div { class: "pagination",
+                    span { class: "pagination-info", "共 {total} 条" }
+                    Pagination {
+                        current: page(),
+                        total_pages,
+                        on_page_change: move |p| page.set(p),
+                    }
                 }
             }
         }

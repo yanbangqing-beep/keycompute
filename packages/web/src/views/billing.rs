@@ -4,12 +4,16 @@ use crate::router::Route;
 use crate::services::{api_client::with_auto_refresh, billing_service};
 use crate::stores::auth_store::AuthStore;
 use crate::utils::time::{format_time, format_time_opt};
+use ui::Pagination;
+
+const PAGE_SIZE: usize = 20;
 
 /// 账单页面 - /billing
 #[component]
 pub fn Billing() -> Element {
     let auth_store = use_context::<AuthStore>();
     let nav = use_navigator();
+    let mut page = use_signal(|| 1u32);
 
     // 账单统计
     let stats = use_resource(move || async move {
@@ -95,20 +99,39 @@ pub fn Billing() -> Element {
                                     }
                                 }
                                 tbody {
-                                    for r in recs {
-                                        tr {
-                                            td { { format_time(&r.created_at) } }
-                                            td { "{r.amount:.4}" }
-                                            td { "{r.currency}" }
-                                            td { { r.description.as_deref().unwrap_or("—") } }
-                                            td {
-                                                span {
-                                                    class: if r.status == "paid" { "badge badge-success" } else { "badge badge-warning" },
-                                                    "{r.status}"
+                                    {
+                                        let start = (page() as usize - 1) * PAGE_SIZE;
+                                        rsx! {
+                                            for r in recs.iter().skip(start).take(PAGE_SIZE) {
+                                                tr {
+                                                    td { { format_time(&r.created_at) } }
+                                                    td { "{r.amount:.4}" }
+                                                    td { "{r.currency}" }
+                                                    td { { r.description.as_deref().unwrap_or("—") } }
+                                                    td {
+                                                        span {
+                                                            class: if r.status == "paid" { "badge badge-success" } else { "badge badge-warning" },
+                                                            "{r.status}"
+                                                        }
+                                                    }
+                                                    td { { format_time_opt(r.paid_at.as_deref()) } }
                                                 }
                                             }
-                                            td { { format_time_opt(r.paid_at.as_deref()) } }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                        {
+                            let total = recs.len();
+                            let total_pages = total.div_ceil(PAGE_SIZE).max(1) as u32;
+                            rsx! {
+                                div { class: "pagination",
+                                    span { class: "pagination-info", "共 {total} 条" }
+                                    Pagination {
+                                        current: page(),
+                                        total_pages,
+                                        on_page_change: move |p| page.set(p),
                                     }
                                 }
                             }
