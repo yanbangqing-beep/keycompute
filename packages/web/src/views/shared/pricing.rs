@@ -138,9 +138,17 @@ pub fn Pricing() -> Element {
                                                                                     op_ok.set("已设为默认定价".to_string());
                                                                                     op_err.set(String::new());
                                                                                     *refresh_tick.write() += 1;
+                                                                                    spawn(async move {
+                                                                                        gloo_timers::future::TimeoutFuture::new(3_000).await;
+                                                                                        op_ok.set(String::new());
+                                                                                    });
                                                                                 }
                                                                                 Err(e) => {
                                                                                     op_err.set(format!("设置默认失败：{e}"));
+                                                                                    spawn(async move {
+                                                                                        gloo_timers::future::TimeoutFuture::new(3_000).await;
+                                                                                        op_err.set(String::new());
+                                                                                    });
                                                                                 }
                                                                             }
                                                                         });
@@ -164,9 +172,17 @@ pub fn Pricing() -> Element {
                                                                                 op_ok.set("定价已删除".to_string());
                                                                                 op_err.set(String::new());
                                                                                 *refresh_tick.write() += 1;
+                                                                                spawn(async move {
+                                                                                    gloo_timers::future::TimeoutFuture::new(3_000).await;
+                                                                                    op_ok.set(String::new());
+                                                                                });
                                                                             }
                                                                             Err(e) => {
                                                                                 op_err.set(format!("删除失败：{e}"));
+                                                                                spawn(async move {
+                                                                                    gloo_timers::future::TimeoutFuture::new(3_000).await;
+                                                                                    op_err.set(String::new());
+                                                                                });
                                                                             }
                                                                         }
                                                                     });
@@ -205,6 +221,10 @@ pub fn Pricing() -> Element {
                         op_err.set(String::new());
                         page.set(1);
                         *refresh_tick.write() += 1;
+                        spawn(async move {
+                            gloo_timers::future::TimeoutFuture::new(3_000).await;
+                            op_ok.set(String::new());
+                        });
                     },
                 }
             }

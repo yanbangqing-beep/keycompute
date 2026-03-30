@@ -33,12 +33,10 @@ pub struct AuthStore {
 }
 
 impl AuthStore {
-    pub fn new() -> Self {
-        // 尝试从 localStorage 恢复 token
-        let initial = Self::load_from_storage();
-        Self {
-            state: use_signal(|| initial),
-        }
+    /// 创建新的 AuthStore。
+    /// 注意：Signal 必须在组件顶层创建后传入，不能在此内部调用 use_signal
+    pub fn new(state: Signal<AuthState>) -> Self {
+        Self { state }
     }
 
     pub fn login(&mut self, access_token: String, refresh_token: String) {
@@ -63,7 +61,7 @@ impl AuthStore {
         (self.state)().refresh_token.clone()
     }
 
-    fn load_from_storage() -> AuthState {
+    pub fn load_from_storage() -> AuthState {
         #[cfg(target_arch = "wasm32")]
         {
             let token = read_local_storage("access_token");

@@ -55,6 +55,12 @@ fn AdminAccountsView() -> Element {
     let mut edit_saving = use_signal(|| false);
     let mut edit_error = use_signal(String::new);
 
+    // 删除确认弹窗状态
+    let mut delete_id = use_signal(String::new);
+    let mut delete_name = use_signal(String::new);
+    let mut show_delete = use_signal(|| false);
+    let mut deleting = use_signal(|| false);
+
     let mut accounts = use_resource(move || async move {
         with_auto_refresh(auth_store, |token| async move {
             account_service::list(None, &token).await
@@ -227,7 +233,10 @@ fn AdminAccountsView() -> Element {
                                                         let token = auth_store.token().unwrap_or_default();
                                                         let id = id.clone();
                                                         spawn(async move {
-                                                            let _ = account_service::test(&id, &token).await;
+                                                            match account_service::test(&id, &token).await {
+                                                                Ok(_) => ui_store.show_success("连接测试成功"),
+                                                                Err(e) => ui_store.show_error(format!("测试失败：{}", e)),
+                                                            }
                                                             accounts.restart();
                                                         });
                                                     }
@@ -239,13 +248,11 @@ fn AdminAccountsView() -> Element {
                                                 size: ButtonSize::Small,
                                                 onclick: {
                                                     let id = acc.id.clone();
+                                                    let name = acc.name.clone();
                                                     move |_| {
-                                                        let token = auth_store.token().unwrap_or_default();
-                                                        let id = id.clone();
-                                                        spawn(async move {
-                                                            let _ = account_service::delete(&id, &token).await;
-                                                            accounts.restart();
-                                                        });
+                                                        delete_id.set(id.clone());
+                                                        delete_name.set(name.clone());
+                                                        show_delete.set(true);
                                                     }
                                                 },
                                                 "删除"
@@ -398,7 +405,7 @@ fn AdminAccountsView() -> Element {
                                 input {
                                     r#type: "checkbox",
                                     checked: edit_is_active(),
-                                    oninput: move |e| edit_is_active.set(e.value() == "true"),
+                                    onchange: move |e| edit_is_active.set(e.checked()),
                                     style: "margin-right:6px",
                                 }
                                 "启用渠道"
@@ -416,6 +423,63 @@ fn AdminAccountsView() -> Element {
                             loading: edit_saving(),
                             onclick: on_edit_save,
                             if edit_saving() { "保存中..." } else { "保存" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 删除确认弹窗
+        if show_delete() {
+            div { class: "modal-backdrop",
+                onclick: move |_| show_delete.set(false),
+                div {
+                    class: "modal",
+                    onclick: move |e| e.stop_propagation(),
+                    div { class: "modal-header",
+                        h2 { class: "modal-title", "确认删除" }
+                        button {
+                            class: "btn btn-ghost btn-sm",
+                            r#type: "button",
+                            onclick: move |_| show_delete.set(false),
+                            "✕"
+                        }
+                    }
+                    div { class: "modal-body",
+                        p {
+                            "确定要删除渠道「"
+                            strong { "{delete_name}" }
+                            "」吗？该操作不可恢复。"
+                        }
+                    }
+                    div { class: "modal-footer",
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| show_delete.set(false),
+                            "取消"
+                        }
+                        Button {
+                            variant: ButtonVariant::Danger,
+                            loading: deleting(),
+                            onclick: move |_| {
+                                let id = delete_id();
+                                let token = auth_store.token().unwrap_or_default();
+                                deleting.set(true);
+                                spawn(async move {
+                                    match account_service::delete(&id, &token).await {
+                                        Ok(_) => {
+                                            ui_store.show_success("渠道已删除");
+                                            accounts.restart();
+                                        }
+                                        Err(e) => {
+                                            ui_store.show_error(format!("删除失败：{}", e));
+                                        }
+                                    }
+                                    deleting.set(false);
+                                    show_delete.set(false);
+                                });
+                            },
+                            if deleting() { "删除中..." } else { "确认删除" }
                         }
                     }
                 }

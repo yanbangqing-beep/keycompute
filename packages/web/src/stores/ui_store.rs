@@ -11,10 +11,10 @@ pub struct UiStore {
 }
 
 impl UiStore {
-    pub fn new() -> Self {
-        Self {
-            toast: use_signal(|| None),
-        }
+    /// 创建新的 UiStore。
+    /// 注意：Signal 必须在组件顶层创建后传入
+    pub fn new(toast: Signal<Option<ToastMsg>>) -> Self {
+        Self { toast }
     }
 
     pub fn show_success(&mut self, title: impl Into<String>) {

@@ -1,8 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::icons::{
-    IconBell, IconChevronDown, IconGlobe, IconLogOut, IconMenu, IconMoon, IconSettings, IconSun,
-    IconUser,
+    IconChevronDown, IconGlobe, IconLogOut, IconMenu, IconMoon, IconSettings, IconSun, IconUser,
 };
 
 /// 用户下拉菜单项回调
@@ -136,12 +135,12 @@ pub fn Header(
                     span { style: "font-size: 11px; margin-left: 2px;", "{lang_label}" }
                 }
 
-                // 通知
-                button {
-                    class: "header-icon-btn",
-                    title: "通知",
-                    IconBell { size: 18 }
-                }
+                // 通知功能待实现，暂隐藏铃铛按钮
+                // button {
+                //     class: "header-icon-btn",
+                //     title: "通知",
+                //     IconBell { size: 18 }
+                // }
 
                 // 用户头像
                 div { class: "header-avatar",

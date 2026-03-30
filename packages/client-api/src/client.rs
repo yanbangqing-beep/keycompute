@@ -7,6 +7,7 @@ use crate::error::{ClientError, Result};
 use reqwest::{Client, Method, RequestBuilder, Response};
 use serde::{Serialize, de::DeserializeOwned};
 use std::sync::{Arc, RwLock};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 /// HTTP 客户端
@@ -27,10 +28,23 @@ impl ApiClient {
     pub fn new(config: ClientConfig) -> Result<Self> {
         config.validate()?;
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_secs))
-            .build()
-            .map_err(|e| ClientError::Config(format!("Failed to create HTTP client: {}", e)))?;
+        let client = {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Client::builder()
+                    .timeout(Duration::from_secs(config.timeout_secs))
+                    .build()
+                    .map_err(|e| {
+                        ClientError::Config(format!("Failed to create HTTP client: {}", e))
+                    })?
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                Client::builder().build().map_err(|e| {
+                    ClientError::Config(format!("Failed to create HTTP client: {}", e))
+                })?
+            }
+        };
 
         Ok(Self {
             inner: Arc::new(ClientInner {
@@ -126,6 +140,7 @@ impl ApiClient {
     /// 发送请求并解析 JSON 响应（含重试逻辑）
     ///
     /// 重试条件：网络/连接错误、服务器 5xx、限流 429
+    /// 退避策略：指数退避，初始延迟 500ms，最大 4s（第 i 次 = 500ms × 2^i）
     /// 每次重试使用 `try_clone` 克隆 builder，无需外部依赖
     pub(crate) async fn send_and_parse<T: DeserializeOwned>(
         &self,
@@ -145,6 +160,13 @@ impl ApiClient {
 
         let mut last_err: Option<ClientError> = None;
         for attempt in 0..=max_retries {
+            // 在第 2 次及以后的尝试前，加入指数退避延迟
+            if attempt > 0 {
+                // 延迟时间：500ms, 1000ms, 2000ms, 最大 4000ms
+                let delay_ms = (500u64 * (1u64 << (attempt - 1).min(3))) as u32;
+                Self::sleep_ms(delay_ms).await;
+            }
+
             // 每次使用克隆的 builder，保留原始供后续重试
             let req = match builder.try_clone() {
                 Some(cloned) => cloned,
@@ -171,6 +193,18 @@ impl ApiClient {
         Err(last_err.unwrap_or(ClientError::Other(
             "Request failed after retries".to_string(),
         )))
+    }
+
+    /// 跨平台异步等待：WASM 使用 gloo_timers，native 使用 tokio
+    async fn sleep_ms(ms: u32) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            gloo_timers::future::TimeoutFuture::new(ms).await;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            tokio::time::sleep(Duration::from_millis(ms as u64)).await;
+        }
     }
 
     /// 判断错误是否值得重试

@@ -72,6 +72,9 @@ pub fn Recharge() -> Element {
     let mut order_state = use_signal(|| OrderState::Idle);
     // 订单手动轮询计数器，变化时触发 use_resource 重执行
     let mut poll_tick = use_signal(|| 0u32);
+    // 轮询世代计数器：每次启动新轮询循环时递增，实现防竞态
+    // 当 loop 中读到的 gen 与当前不一致时，说明旧 loop 应退出
+    let mut poll_gen = use_signal(|| 0u32);
     // 自动轮询是否激活（进入 Pending 后开始，离开后停止）
     let mut auto_poll_active = use_signal(|| false);
 
@@ -107,11 +110,18 @@ pub fn Recharge() -> Element {
     });
 
     // 自动轮询：进入 Pending 状态后每 5 秒自动检查一次
+    // 防竞态：每次开启时捕证当前 gen，循环中检测 gen 变化即退出旧 loop
     use_effect(move || {
         if auto_poll_active() {
+            // 单调递增，捕证本次开启对应的 generation
+            let my_gen = poll_gen();
             spawn(async move {
                 loop {
                     sleep(Duration::from_secs(5)).await;
+                    // gen 发生变化（新轮询已开启），旧 loop 直接退出
+                    if poll_gen() != my_gen {
+                        break;
+                    }
                     // 若状态已不是 Pending，停止轮询
                     match order_state() {
                         OrderState::Pending {
@@ -174,7 +184,8 @@ pub fn Recharge() -> Element {
                         method: order.payment_method.clone(),
                     });
                     amount.set(String::new());
-                    // 启动自动轮询
+                    // 递增 gen，使旧轮询 loop 自动退出，再将 active 设为 true 开启新轮询
+                    *poll_gen.write() += 1;
                     auto_poll_active.set(true);
                 }
                 Err(e) => {

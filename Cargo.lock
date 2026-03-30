@@ -661,6 +661,7 @@ name = "client-api"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "gloo-timers",
  "reqwest",
  "serde",
  "serde_json",
@@ -7110,6 +7111,9 @@ version = "0.1.0"
 dependencies = [
  "charming",
  "dioxus",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -7426,6 +7430,8 @@ dependencies = [
  "gloo-timers",
  "serde_json",
  "ui",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

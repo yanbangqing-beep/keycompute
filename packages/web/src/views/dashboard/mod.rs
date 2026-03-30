@@ -51,11 +51,11 @@ pub fn Dashboard() -> Element {
         .await
     });
 
-    // 拉取最近 30 条用量记录，用于图表聚合
+    // 拉取最近 100 条用量记录，用于图表聚合（提升自 30 条以覆盖更多时间范围）
     let usage_records = use_resource(move || async move {
         with_auto_refresh(auth_store, |token| async move {
             usage_service::list(
-                Some(client_api::api::usage::UsageQueryParams::new().with_limit(30)),
+                Some(client_api::api::usage::UsageQueryParams::new().with_limit(100)),
                 &token,
             )
             .await
@@ -176,7 +176,7 @@ pub fn Dashboard() -> Element {
             if !line_x.is_empty() {
                 div {
                     class: "section",
-                    h2 { class: "section-title", "调用趋势（最近30条）" }
+                    h2 { class: "section-title", "调用趋势（最近100条）" }
                     div { class: "chart-container",
                         LineChart {
                             id: "dashboard-line-chart",

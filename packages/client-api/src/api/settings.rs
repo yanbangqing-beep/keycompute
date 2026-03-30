@@ -70,14 +70,21 @@ impl SettingsApi {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum SettingValue {
-    String(String),
-    Number(f64),
+    /// JSON null 必须放在最前，#[serde(untagged)] 按顺序尝试反序列化
+    Null,
     Boolean(bool),
+    Number(f64),
+    String(String),
     Array(Vec<serde_json::Value>),
     Object(serde_json::Map<String, serde_json::Value>),
 }
 
 impl SettingValue {
+    /// 是否为 null
+    pub fn is_null(&self) -> bool {
+        matches!(self, SettingValue::Null)
+    }
+
     /// 获取字符串值
     pub fn as_string(&self) -> Option<&str> {
         match self {

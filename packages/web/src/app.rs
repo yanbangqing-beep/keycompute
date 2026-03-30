@@ -5,7 +5,7 @@ use crate::router::Route;
 use crate::services::user_service;
 use crate::stores::{
     auth_store::AuthStore,
-    ui_store::UiStore,
+    ui_store::{ToastMsg, UiStore},
     user_store::{UserInfo, UserStore},
 };
 use crate::views::shared::Toast;
@@ -15,11 +15,17 @@ use ui::{AppShell, NavItem, NavSection, UserMenuAction};
 /// 根组件：提供所有全局 context，挂载路由
 #[component]
 pub fn App() -> Element {
-    // 全局 context providers（必须在组件树顶层调用）
-    let auth_store = use_context_provider(AuthStore::new);
-    let mut user_store = use_context_provider(UserStore::new);
-    let _ui_store = use_context_provider(UiStore::new);
-    let _lang = use_context_provider(|| use_signal(Lang::default));
+    // 所有 Signal 必须在组件顶层直接创建，不能在 hook 的闭包里调用 use_signal
+    let auth_initial = AuthStore::load_from_storage();
+    let auth_state = use_signal(|| auth_initial);
+    let user_info = use_signal(|| None::<UserInfo>);
+    let toast_signal = use_signal(|| None::<ToastMsg>);
+    let lang_signal = use_signal(Lang::default);
+
+    let auth_store = use_context_provider(|| AuthStore::new(auth_state));
+    let mut user_store = use_context_provider(|| UserStore::new(user_info));
+    let _ui_store = use_context_provider(|| UiStore::new(toast_signal));
+    let _lang = use_context_provider(|| lang_signal);
 
     // App 启动时，若 localStorage 已有 token，自动拉取用户信息
     use_effect(move || {
@@ -95,30 +101,47 @@ pub fn AppLayout() -> Element {
         .map(|u| u.display_name().to_string())
         .unwrap_or_default();
 
+    // 路径由 Route 枚举派生，避免硬编码字符串拼写错误
+    let r_dashboard = Route::Dashboard {}.to_string();
+    let r_api_keys = Route::ApiKeyList {}.to_string();
+    let r_usage = Route::Usage {}.to_string();
+    let r_payments = Route::PaymentsOverview {}.to_string();
+    let r_distribution = Route::DistributionOverview {}.to_string();
+    let r_profile = Route::UserProfile {}.to_string();
+    let r_settings = Route::UserSettings {}.to_string();
+    let r_admin_users = Route::Users {}.to_string();
+    let r_admin_accounts = Route::Accounts {}.to_string();
+    let r_admin_pricing = Route::Pricing {}.to_string();
+    let r_admin_payment_orders = Route::PaymentOrders {}.to_string();
+    let r_admin_distribution = Route::DistributionRecords {}.to_string();
+    let r_admin_tenants = Route::Tenants {}.to_string();
+    let r_admin_system = Route::System {}.to_string();
+    let r_admin_system_settings = Route::Settings {}.to_string();
+
     let mut nav_sections = vec![
         NavSection {
             title: None,
             items: vec![
-                NavItem::new("控制台", "/", NavIcon::Home),
-                NavItem::new("API Key", "/api-keys", NavIcon::Key),
+                NavItem::new("控制台", r_dashboard, NavIcon::Home),
+                NavItem::new("API Key", r_api_keys, NavIcon::Key),
             ],
         },
         NavSection {
             title: Some("用量".to_string()),
-            items: vec![NavItem::new("用量统计", "/usage", NavIcon::BarChart)],
+            items: vec![NavItem::new("用量统计", r_usage, NavIcon::BarChart)],
         },
         NavSection {
             title: Some("账务".to_string()),
             items: vec![
-                NavItem::new("支付与账单", "/payments", NavIcon::Wallet),
-                NavItem::new("分发管理", "/distribution", NavIcon::Share),
+                NavItem::new("支付与账单", r_payments, NavIcon::Wallet),
+                NavItem::new("分发管理", r_distribution, NavIcon::Share),
             ],
         },
         NavSection {
             title: Some("账户".to_string()),
             items: vec![
-                NavItem::new("个人资料", "/user/profile", NavIcon::User),
-                NavItem::new("账户设置", "/user/settings", NavIcon::Settings),
+                NavItem::new("个人资料", r_profile, NavIcon::User),
+                NavItem::new("账户设置", r_settings, NavIcon::Settings),
             ],
         },
     ];
@@ -128,23 +151,25 @@ pub fn AppLayout() -> Element {
         nav_sections.push(NavSection {
             title: Some("管理".to_string()),
             items: vec![
-                NavItem::new("用户管理", "/admin/users", NavIcon::User),
-                NavItem::new("渠道账号", "/admin/accounts", NavIcon::Key),
-                NavItem::new("计费定价", "/admin/pricing", NavIcon::Wallet),
-                NavItem::new("支付订单", "/admin/payment-orders", NavIcon::Wallet),
-                NavItem::new("分销记录", "/admin/distribution-records", NavIcon::Share),
-                NavItem::new("租户管理", "/admin/tenants", NavIcon::Home),
-                NavItem::new("系统诊断", "/admin/system", NavIcon::Settings),
-                NavItem::new("系统设置", "/admin/settings", NavIcon::Settings),
+                NavItem::new("用户管理", r_admin_users, NavIcon::User).admin(),
+                NavItem::new("渠道账号", r_admin_accounts, NavIcon::Key).admin(),
+                NavItem::new("计费定价", r_admin_pricing, NavIcon::Wallet).admin(),
+                NavItem::new("支付订单", r_admin_payment_orders, NavIcon::Wallet).admin(),
+                NavItem::new("分销记录", r_admin_distribution, NavIcon::Share).admin(),
+                NavItem::new("租户管理", r_admin_tenants, NavIcon::Home).admin(),
+                NavItem::new("系统诊断", r_admin_system, NavIcon::Settings).admin(),
+                NavItem::new("系统设置", r_admin_system_settings, NavIcon::Settings).admin(),
             ],
         });
     }
+
+    let current_path = use_route::<Route>().to_string();
 
     rsx! {
         AppShell {
             nav_sections,
             user_name,
-            current_path: use_route::<Route>().to_string(),
+            current_path,
             on_user_menu: move |action: UserMenuAction| match action {
                 UserMenuAction::Profile => { nav.push(Route::UserProfile {}); }
                 UserMenuAction::Settings => { nav.push(Route::UserSettings {}); }

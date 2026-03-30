@@ -36,10 +36,10 @@ pub struct UserStore {
 }
 
 impl UserStore {
-    pub fn new() -> Self {
-        Self {
-            info: use_signal(|| None),
-        }
+    /// 创建新的 UserStore。
+    /// 注意：Signal 必须在组件顶层创建后传入
+    pub fn new(info: Signal<Option<UserInfo>>) -> Self {
+        Self { info }
     }
 
     #[allow(dead_code)]

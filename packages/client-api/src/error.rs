@@ -92,9 +92,11 @@ impl ClientError {
 
 impl From<reqwest::Error> for ClientError {
     fn from(err: reqwest::Error) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
         if err.is_connect() || err.is_timeout() {
-            ClientError::Network(err.to_string())
-        } else if err.is_status() {
+            return ClientError::Network(err.to_string());
+        }
+        if err.is_status() {
             if let Some(status) = err.status() {
                 ClientError::from_status(status.as_u16(), err.to_string())
             } else {

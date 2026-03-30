@@ -189,12 +189,12 @@ pub fn DistributionRecords() -> Element {
                         thead {
                             tr {
                                 TableHead { "记录编号" }
-                                TableHead { "来源用户" }
+                                TableHead { "来源用户 ID" }
                                 TableHead { "消费金额" }
                                 TableHead { "分销金额" }
                                 TableHead { "状态" }
                                 TableHead { "创建时间" }
-                                TableHead { "推荐人" }
+                                TableHead { "推荐人 ID" }
                             }
                         }
                         tbody {
@@ -202,7 +202,14 @@ pub fn DistributionRecords() -> Element {
                                 for rec in list.iter().skip(admin_start).take(PAGE_SIZE) {
                                     tr {
                                         td { code { "{rec.id}" } }
-                                        td { "{rec.referred_id}" }
+                                        td {
+                                            // 截取 UUID 前 8 位＋全量 tooltip
+                                            span {
+                                                title: "{rec.referred_id}",
+                                                style: "cursor: help; font-family: monospace; font-size: 13px;",
+                                                { format!("{}…", &rec.referred_id[..rec.referred_id.len().min(8)]) }
+                                            }
+                                        }
                                         td { "¥{rec.amount:.2}" }
                                         td { "¥{rec.commission:.2}" }
                                         td {
@@ -212,7 +219,13 @@ pub fn DistributionRecords() -> Element {
                                             }
                                         }
                                         td { { format_time(&rec.created_at) } }
-                                        td { "{rec.referrer_id}" }
+                                        td {
+                                            span {
+                                                title: "{rec.referrer_id}",
+                                                style: "cursor: help; font-family: monospace; font-size: 13px;",
+                                                { format!("{}…", &rec.referrer_id[..rec.referrer_id.len().min(8)]) }
+                                            }
+                                        }
                                     }
                                 }
                             }

@@ -5,6 +5,7 @@ use client_api::{
 use dioxus::prelude::*;
 use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Pagination, Table, TableHead};
 
+use crate::router::Route;
 use crate::services::api_client::{get_client, with_auto_refresh};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::ui_store::UiStore;
@@ -351,6 +352,7 @@ fn AdminUsersView() -> Element {
 fn UserSelfView() -> Element {
     let user_store = use_context::<UserStore>();
     let user_info = user_store.info.read();
+    let nav = use_navigator();
 
     let display_name = user_info
         .as_ref()
@@ -377,7 +379,7 @@ fn UserSelfView() -> Element {
                 Button {
                     variant: ButtonVariant::Secondary,
                     size: ButtonSize::Small,
-                    onclick: move |_| {},
+                    onclick: move |_| { nav.push(Route::UserProfile {}); },
                     "编辑资料"
                 }
             }

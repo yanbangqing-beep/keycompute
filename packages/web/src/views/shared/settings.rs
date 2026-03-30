@@ -131,6 +131,12 @@ fn SettingItem(
     let mut edit_val = use_signal(|| value.clone());
     let mut saving = use_signal(|| false);
 
+    // 当 value prop 发生变化时（即 settings 资源加载完成），同步到编辑框
+    let value_for_effect = value.clone();
+    use_effect(move || {
+        *edit_val.write() = value_for_effect.clone();
+    });
+
     let key = setting_key.clone();
     let on_save = move |_| {
         let val = edit_val();

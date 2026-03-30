@@ -39,7 +39,8 @@ pub fn PaymentOrders() -> Element {
         let params = if status == "all" {
             None
         } else {
-            Some(client_api::api::payment::PaymentQueryParams::default())
+            // 修复：必须把 status 设入查询参数
+            Some(client_api::api::payment::PaymentQueryParams::new().with_status(status.clone()))
         };
         with_auto_refresh(auth_store, |token| {
             let value = params.clone();
@@ -131,7 +132,19 @@ pub fn PaymentOrders() -> Element {
                                     for o in list.iter().skip(admin_start).take(PAGE_SIZE) {
                                         tr {
                                             td { code { "{o.out_trade_no}" } }
-                                            td { "{o.user_id}" }
+                                            td {
+                                                {
+                                                    let uid = o.user_id.clone();
+                                                    let short = format!("{}\u{2026}", &uid[..uid.len().min(8)]);
+                                                    rsx! {
+                                                        span {
+                                                            title: "{uid}",
+                                                            style: "cursor:help;font-family:monospace;font-size:13px;",
+                                                            "{short}"
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             td { "¥{o.amount:.2}" }
                                             td {
                                                 Badge {
