@@ -25,6 +25,11 @@ fn Root() -> Element {
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
+        // ECharts 用于图表渲染
+        document::Script {
+            src: "https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js",
+            r#type: "text/javascript",
+        }
         App {}
     }
 }

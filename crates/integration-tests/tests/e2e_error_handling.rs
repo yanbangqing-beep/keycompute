@@ -10,8 +10,7 @@ use futures::StreamExt;
 use integration_tests::common::VerificationChain;
 use integration_tests::mocks::provider::MockProviderFactory;
 use keycompute_provider_trait::{ProviderAdapter, StreamEvent, UpstreamRequest};
-use keycompute_routing::RoutingEngine;
-use keycompute_runtime::{CooldownManager, CooldownReason, ProviderHealthStore};
+use keycompute_routing::{AccountStateStore, ProviderHealthStore, RoutingEngine};
 use keycompute_types::{PricingSnapshot, RequestContext};
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -193,56 +192,55 @@ fn create_test_context() -> RequestContext {
 async fn test_consecutive_failures_trigger_cooldown() {
     let mut chain = VerificationChain::new();
 
-    // 1. 设置冷却管理器
-    let cooldown = Arc::new(CooldownManager::new());
+    // 1. 设置账号状态存储
+    let account_states = Arc::new(AccountStateStore::new());
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::new",
-        "Cooldown manager created",
+        "keycompute-routing",
+        "AccountStateStore::new",
+        "Account state store created",
         true,
     );
 
-    // 2. 模拟连续失败
-    let provider_name = "test-provider";
+    // 2. 模拟连续失败并设置冷却
+    let account_id = Uuid::new_v4();
     for i in 1..=5 {
-        cooldown.set_provider_cooldown(
-            provider_name,
-            Some(Duration::from_secs(60)),
-            CooldownReason::ConsecutiveErrors,
-        );
+        account_states.mark_error(account_id);
         chain.add_step(
-            "keycompute-runtime",
-            "CooldownManager::record_failure",
-            format!("Failure #{} recorded", i),
+            "keycompute-routing",
+            "AccountStateStore::mark_error",
+            format!("Error #{} recorded", i),
             true,
         );
     }
 
+    // 手动设置冷却
+    account_states.set_cooldown(account_id, 60);
+
     // 3. 检查冷却状态
-    let is_cooling = cooldown.is_provider_cooling(provider_name);
+    let is_cooling = account_states.is_cooling_down(&account_id);
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::is_provider_cooling",
-        format!("Provider '{}' cooling: {}", provider_name, is_cooling),
+        "keycompute-routing",
+        "AccountStateStore::is_cooling_down",
+        format!("Account '{}' cooling: {}", account_id, is_cooling),
         is_cooling,
     );
 
-    // 4. 检查冷却原因
-    let cooling_providers = cooldown.cooling_providers();
+    // 4. 检查冷却中的账号
+    let cooling_accounts = account_states.cooling_accounts();
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::cooling_providers",
-        format!("Cooling providers count: {}", cooling_providers.len()),
-        !cooling_providers.is_empty(),
+        "keycompute-routing",
+        "AccountStateStore::cooling_accounts",
+        format!("Cooling accounts count: {}", cooling_accounts.len()),
+        !cooling_accounts.is_empty(),
     );
 
-    if !cooling_providers.is_empty() {
-        let (_, entry) = &cooling_providers[0];
+    if !cooling_accounts.is_empty() {
+        let (id, state) = &cooling_accounts[0];
         chain.add_step(
-            "keycompute-runtime",
-            "CooldownEntry::reason",
-            format!("Cooldown reason: {:?}", entry.reason),
-            entry.reason == CooldownReason::ConsecutiveErrors,
+            "keycompute-routing",
+            "AccountState::cooldown_until",
+            format!("Account {} has cooldown_until set", id),
+            state.cooldown_until.is_some(),
         );
     }
 
@@ -255,53 +253,49 @@ async fn test_consecutive_failures_trigger_cooldown() {
 async fn test_cooldown_recovery() {
     let mut chain = VerificationChain::new();
 
-    // 1. 设置短时间冷却
-    let cooldown = Arc::new(CooldownManager::with_default_duration(
-        Duration::from_millis(100),
-    ));
-    let provider_name = "recovering-provider";
+    // 1. 设置账号状态存储
+    let account_states = Arc::new(AccountStateStore::new());
+    let account_id = Uuid::new_v4();
 
-    cooldown.set_provider_cooldown(
-        provider_name,
-        Some(Duration::from_millis(100)),
-        CooldownReason::ConsecutiveErrors,
-    );
+    // 2. 设置冷却
+    account_states.set_cooldown(account_id, 60);
 
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::set_provider_cooldown",
-        "Short cooldown set (100ms)",
+        "keycompute-routing",
+        "AccountStateStore::set_cooldown",
+        "Account cooldown set",
         true,
     );
 
-    // 2. 初始状态：冷却中
-    let initial_cooling = cooldown.is_provider_cooling(provider_name);
+    // 3. 验证初始冷却状态
+    let initial_cooling = account_states.is_cooling_down(&account_id);
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::initial_cooling",
-        format!("Initially cooling: {}", initial_cooling),
+        "keycompute-routing",
+        "AccountStateStore::initial_cooling",
+        format!("Account initially cooling: {}", initial_cooling),
         initial_cooling,
     );
 
-    // 3. 等待冷却过期
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    // 4. 清除冷却
+    account_states.clear_cooldown(account_id);
 
-    // 4. 冷却过期后
-    let after_cooling = cooldown.is_provider_cooling(provider_name);
+    // 5. 验证冷却已清除
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let after_clear = account_states.is_cooling_down(&account_id);
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::after_cooldown",
-        format!("After cooldown: {}", after_cooling),
-        !after_cooling, // 应该不再冷却
+        "keycompute-routing",
+        "AccountStateStore::after_clear",
+        format!("Account after clear cooling: {}", after_clear),
+        !after_clear,
     );
 
-    // 5. 清理过期条目
-    cooldown.cleanup_expired();
+    // 6. 验证错误计数也被清除
+    let state = account_states.get(&account_id);
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::cleanup_expired",
-        "Expired entries cleaned up",
-        true,
+        "keycompute-routing",
+        "AccountStateStore::cleanup_expired",
+        format!("Error count after clear: {}", state.error_count),
+        state.error_count == 0,
     );
 
     chain.print_report();
@@ -313,14 +307,14 @@ async fn test_cooldown_recovery() {
 async fn test_health_and_cooldown_integration() {
     let mut chain = VerificationChain::new();
 
-    // 1. 设置健康状态存储和冷却管理器
+    // 1. 设置健康状态存储和账号状态存储
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
+    let account_states = Arc::new(AccountStateStore::new());
 
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ProviderHealthStore::new",
-        "Health store created",
+        "Health store and account states created",
         true,
     );
 
@@ -331,7 +325,7 @@ async fn test_health_and_cooldown_integration() {
     }
 
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ProviderHealthStore::record_failures",
         format!("Recorded 10 failures for '{}'", provider_name),
         true,
@@ -340,31 +334,27 @@ async fn test_health_and_cooldown_integration() {
     // 3. 检查健康状态
     let score = provider_health.get_score(provider_name);
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ProviderHealthStore::get_health_score",
         format!("Health score: {}", score),
         score < 50, // 健康分数应该很低
     );
 
-    // 4. 触发冷却
+    // 4. 触发账号冷却
+    let account_id = Uuid::new_v4();
     if score < 50 {
-        cooldown.set_provider_cooldown(
-            provider_name,
-            Some(Duration::from_secs(120)),
-            CooldownReason::ConsecutiveErrors,
-        );
+        account_states.set_cooldown(account_id, 120);
     }
 
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::trigger_on_low_health",
-        "Cooldown triggered due to low health",
-        cooldown.is_provider_cooling(provider_name),
+        "keycompute-routing",
+        "AccountStateStore::trigger_on_low_health",
+        "Account cooldown triggered due to low health",
+        account_states.is_cooling_down(&account_id),
     );
 
     // 5. 创建路由引擎验证过滤
-    let account_states = Arc::new(keycompute_runtime::AccountStateStore::new());
-    let engine = RoutingEngine::new(account_states, provider_health.clone(), cooldown.clone());
+    let engine = RoutingEngine::new(account_states, provider_health.clone());
 
     let healthy_providers = engine.healthy_providers();
     chain.add_step(
@@ -852,20 +842,16 @@ async fn test_concurrent_requests_with_cooldown() {
 
     let mut chain = VerificationChain::new();
 
-    // 1. 设置冷却
-    let cooldown = Arc::new(CooldownManager::new());
-    let provider_name = "concurrent-cooldown-provider";
+    // 1. 设置账号冷却
+    let account_states = Arc::new(AccountStateStore::new());
+    let account_id = Uuid::new_v4();
 
-    cooldown.set_provider_cooldown(
-        provider_name,
-        Some(Duration::from_secs(60)),
-        CooldownReason::CircuitBreaker,
-    );
+    account_states.set_cooldown(account_id, 60);
 
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ConcurrentCooldown::set",
-        "Cooldown set for concurrent test",
+        "Account cooldown set for concurrent test",
         true,
     );
 
@@ -873,9 +859,9 @@ async fn test_concurrent_requests_with_cooldown() {
     let mut tasks = JoinSet::new();
 
     for _ in 0..10 {
-        let c = cooldown.clone();
-        let p = provider_name.to_string();
-        tasks.spawn(async move { c.is_provider_cooling(&p) });
+        let states = account_states.clone();
+        let aid = account_id;
+        tasks.spawn(async move { states.is_cooling_down(&aid) });
     }
 
     // 3. 所有检查应该一致

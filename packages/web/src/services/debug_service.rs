@@ -4,7 +4,8 @@ use client_api::error::Result;
 use client_api::{
     DebugApi,
     api::debug::{
-        GatewayStats, GatewayStatus, HealthCheckResponse, ProviderHealthResponse, RoutingDebugInfo,
+        GatewayStats, GatewayStatus, HealthCheckResponse, ProviderHealthResponse,
+        ResetHealthResponse, RoutingDebugInfo,
     },
 };
 
@@ -33,4 +34,10 @@ pub async fn gateway_stats(token: &str) -> Result<GatewayStats> {
 pub async fn check_health(token: &str) -> Result<HealthCheckResponse> {
     let client = get_client();
     DebugApi::new(&client).check_provider_health(token).await
+}
+
+/// 重置所有 Provider 健康状态和冷却状态
+pub async fn reset_health(token: &str) -> Result<ResetHealthResponse> {
+    let client = get_client();
+    DebugApi::new(&client).reset_health(token).await
 }

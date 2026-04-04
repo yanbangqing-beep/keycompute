@@ -9,7 +9,7 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
 };
 use keycompute_types::{RequestContext, UsageAccumulator};
 use serde::{Deserialize, Serialize};
@@ -247,6 +247,94 @@ pub async fn get_provider_health(
     Ok(Json(ProviderHealthResponse {
         healthy_providers: providers,
         account_count: 0, // TODO: 从 AccountStateStore 获取实际数量
+    }))
+}
+
+/// 重置健康状态响应
+#[derive(Debug, Serialize)]
+pub struct ResetHealthResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 消息
+    pub message: String,
+}
+
+/// 重置 Provider 健康状态和冷却状态
+///
+/// 用于调试，清除所有 Provider 和账号的健康状态和冷却状态
+pub async fn reset_health(
+    State(state): State<AppState>,
+    _auth: AuthExtractor,
+) -> Result<Json<ResetHealthResponse>> {
+    // 重置所有 Provider 的健康状态
+    let providers = state.routing.configured_providers();
+    for provider in providers {
+        state.provider_health.reset_stats(provider);
+    }
+
+    // 清除所有账号冷却
+    for (account_id, _) in state.account_states.cooling_accounts() {
+        state.account_states.clear_cooldown(account_id);
+    }
+
+    tracing::info!("Health and cooldown state reset for all providers");
+
+    Ok(Json(ResetHealthResponse {
+        success: true,
+        message: "All provider health and cooldown states have been reset".to_string(),
+    }))
+}
+
+/// 设置指定账号的冷却状态请求
+#[derive(Debug, Deserialize)]
+pub struct SetAccountCooldownRequest {
+    /// 冷却持续时间（秒），默认 60 秒
+    pub duration_secs: Option<u64>,
+}
+
+/// 设置指定账号的冷却状态响应
+#[derive(Debug, Serialize)]
+pub struct SetAccountCooldownResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 消息
+    pub message: String,
+    /// 账号 ID
+    pub account_id: String,
+    /// 冷却持续时间（秒）
+    pub duration_secs: u64,
+}
+
+/// 设置指定账号的冷却状态
+///
+/// POST /debug/accounts/{account_id}/cooldown
+///
+/// 手动触发指定账号进入冷却状态，用于临时禁用某个账号
+pub async fn set_account_cooldown(
+    State(state): State<AppState>,
+    _auth: AuthExtractor,
+    Path(account_id): Path<Uuid>,
+    Json(req): Json<SetAccountCooldownRequest>,
+) -> Result<Json<SetAccountCooldownResponse>> {
+    let duration_secs = req.duration_secs.unwrap_or(60);
+
+    // 设置账号冷却状态
+    state.account_states.set_cooldown(account_id, duration_secs);
+
+    tracing::info!(
+        account_id = %account_id,
+        duration_secs = duration_secs,
+        "Account cooldown set via API"
+    );
+
+    Ok(Json(SetAccountCooldownResponse {
+        success: true,
+        message: format!(
+            "Account {} entered cooldown state for {} seconds",
+            account_id, duration_secs
+        ),
+        account_id: account_id.to_string(),
+        duration_secs,
     }))
 }
 

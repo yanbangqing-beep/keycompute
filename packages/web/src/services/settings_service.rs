@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 
 use client_api::error::Result;
-use client_api::{SettingsApi, api::settings::SettingValue};
+use client_api::{
+    SettingsApi,
+    api::settings::{PublicSettings, SettingValue},
+};
 use std::collections::HashMap;
 
 use super::api_client::get_client;
@@ -33,7 +36,14 @@ pub async fn update_by_key(
         .await
 }
 
-pub async fn get_public() -> Result<HashMap<String, SettingValue>> {
+/// 获取公开设置（结构化格式）
+pub async fn get_public() -> Result<PublicSettings> {
     let client = get_client();
     SettingsApi::new(&client).get_public_settings().await
+}
+
+/// 获取公开设置（HashMap 格式，向后兼容）
+pub async fn get_public_map() -> Result<HashMap<String, SettingValue>> {
+    let client = get_client();
+    SettingsApi::new(&client).get_public_settings_map().await
 }

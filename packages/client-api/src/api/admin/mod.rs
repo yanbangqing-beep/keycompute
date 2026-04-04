@@ -9,6 +9,7 @@ mod user;
 
 use crate::client::ApiClient;
 use crate::error::Result;
+use serde::Deserialize;
 
 pub use super::common::MessageResponse;
 
@@ -245,6 +246,16 @@ impl AdminApi {
         } else {
             "/api/v1/admin/payments/orders".to_string()
         };
-        self.client.get_json(&path, Some(token)).await
+        // 后端返回 { orders: Vec<PaymentOrderInfo>, page: u32, page_size: u32 }
+        #[derive(Deserialize)]
+        struct AdminPaymentOrderListResponse {
+            orders: Vec<PaymentOrderInfo>,
+            #[allow(dead_code)]
+            page: u32,
+            #[allow(dead_code)]
+            page_size: u32,
+        }
+        let resp: AdminPaymentOrderListResponse = self.client.get_json(&path, Some(token)).await?;
+        Ok(resp.orders)
     }
 }

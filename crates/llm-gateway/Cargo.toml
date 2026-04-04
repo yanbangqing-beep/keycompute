@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 keycompute-types = { workspace = true }
 keycompute-runtime = { workspace = true }
+keycompute-routing = { workspace = true }
 keycompute-provider-trait = { workspace = true }
 async-trait = "0.1"
 bytes = "1"

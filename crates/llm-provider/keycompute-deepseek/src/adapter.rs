@@ -93,11 +93,23 @@ impl DeepSeekProvider {
     }
 
     /// 获取实际请求端点
+    ///
+    /// 支持两种格式的 endpoint 配置：
+    /// - 完整路径: `https://api.deepseek.com/v1/chat/completions`
+    /// - 基础 URL: `https://api.deepseek.com/v1` (会自动拼接 `/chat/completions`)
     fn get_endpoint(&self, request: &UpstreamRequest) -> String {
         if request.endpoint.is_empty() {
-            DEEPSEEK_DEFAULT_ENDPOINT.to_string()
+            return DEEPSEEK_DEFAULT_ENDPOINT.to_string();
+        }
+
+        let endpoint = request.endpoint.clone();
+        // 如果 endpoint 以 /v1 或 /v1/ 结尾，说明是基础 URL，需要拼接路径
+        if endpoint.ends_with("/v1") || endpoint.ends_with("/v1/") {
+            let base = endpoint.trim_end_matches('/');
+            format!("{}/chat/completions", base)
         } else {
-            request.endpoint.clone()
+            // 否则假设用户提供了完整路径
+            endpoint
         }
     }
 
@@ -150,6 +162,11 @@ impl DeepSeekProvider {
             KeyComputeError::ProviderError(format!("Failed to serialize request: {}", e))
         })?;
 
+        eprintln!(
+            "[DEBUG] DeepSeek stream_chat_internal: endpoint={}",
+            endpoint
+        );
+
         let headers = vec![
             (
                 "Authorization".to_string(),
@@ -159,7 +176,10 @@ impl DeepSeekProvider {
             ("Accept".to_string(), "text/event-stream".to_string()),
         ];
 
+        eprintln!("[DEBUG] DeepSeek stream_chat_internal: calling transport.post_stream");
         let byte_stream: ByteStream = transport.post_stream(&endpoint, headers, body_json).await?;
+        eprintln!("[DEBUG] DeepSeek stream_chat_internal: post_stream returned, creating parser");
+
         // 复用 OpenAI 的流解析器，DeepSeek SSE 格式与 OpenAI 完全兼容
         Ok(parse_openai_stream(byte_stream))
     }

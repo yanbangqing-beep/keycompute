@@ -74,8 +74,10 @@ use crate::{
         refresh_token_handler,
         register_handler,
         resend_verification_handler,
+        reset_health,
         reset_password_handler,
         retrieve_model,
+        set_account_cooldown,
         set_default_pricing,
         sync_payment_order,
         test_account,
@@ -250,6 +252,11 @@ pub fn create_router(state: AppState) -> Router {
     let debug_routes = Router::new()
         .route("/debug/routing", get(debug_routing))
         .route("/debug/providers", get(get_provider_health))
+        .route("/debug/providers/reset", post(reset_health))
+        .route(
+            "/debug/accounts/{account_id}/cooldown",
+            post(set_account_cooldown),
+        )
         .route("/debug/gateway/status", get(get_gateway_status))
         .route("/debug/gateway/stats", get(get_execution_stats))
         .route("/debug/gateway/health", post(check_provider_health))

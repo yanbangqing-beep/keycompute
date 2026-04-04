@@ -3,8 +3,7 @@
 //! 验证双层路由：Layer1 模型路由 + Layer2 账号路由
 
 use integration_tests::common::VerificationChain;
-use keycompute_routing::RoutingEngine;
-use keycompute_runtime::{AccountStateStore, CooldownManager, CooldownReason, ProviderHealthStore};
+use keycompute_routing::{AccountStateStore, ProviderHealthStore, RoutingEngine};
 use keycompute_types::{PricingSnapshot, RequestContext};
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -14,8 +13,7 @@ use uuid::Uuid;
 fn create_test_engine() -> RoutingEngine {
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
-    RoutingEngine::new(account_states, provider_health, cooldown)
+    RoutingEngine::new(account_states, provider_health)
 }
 
 /// 创建测试用的请求上下文
@@ -105,14 +103,13 @@ async fn test_routing_provider_health() {
     // 1. 创建带健康状态的引擎
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
 
     // 2. 记录 Provider 健康状态
     provider_health.record_success("openai", 100);
     provider_health.record_success("openai", 150);
     provider_health.record_failure("claude");
 
-    let engine = RoutingEngine::new(account_states, provider_health.clone(), cooldown);
+    let engine = RoutingEngine::new(account_states, provider_health.clone());
 
     chain.add_step(
         "keycompute-routing",
@@ -152,7 +149,7 @@ async fn test_routing_provider_health() {
     assert!(chain.all_passed());
 }
 
-/// 测试 Provider 冷却路由
+/// 测试账号冷却路由
 #[tokio::test]
 async fn test_routing_provider_cooldown() {
     let mut chain = VerificationChain::new();
@@ -160,58 +157,55 @@ async fn test_routing_provider_cooldown() {
     // 1. 创建引擎
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
 
-    let engine = RoutingEngine::new(account_states, provider_health, cooldown.clone());
+    let engine = RoutingEngine::new(account_states.clone(), provider_health);
 
     // 2. 初始状态检查
-    let initial_cooling = engine.is_provider_cooling("openai");
+    let account_id = Uuid::new_v4();
+    let initial_cooling = account_states.is_cooling_down(&account_id);
     chain.add_step(
         "keycompute-routing",
-        "CooldownManager::initial_state",
-        format!("OpenAI initially cooling: {}", initial_cooling),
+        "AccountStateStore::initial_state",
+        format!("Account initially cooling: {}", initial_cooling),
         !initial_cooling,
     );
 
-    // 3. 设置 Provider 冷却
-    cooldown.set_provider_cooldown(
-        "openai",
-        Some(std::time::Duration::from_secs(60)),
-        CooldownReason::ConsecutiveErrors,
-    );
+    // 3. 设置账号冷却
+    account_states.set_cooldown(account_id, 60);
 
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::set_provider_cooldown",
-        "Provider cooldown set",
+        "keycompute-routing",
+        "AccountStateStore::set_cooldown",
+        "Account cooldown set",
         true,
     );
 
     // 4. 检查冷却状态
-    let now_cooling = engine.is_provider_cooling("openai");
+    let now_cooling = engine.is_account_cooling(&account_id);
     chain.add_step(
         "keycompute-routing",
-        "RoutingEngine::is_provider_cooling",
-        format!("OpenAI now cooling: {}", now_cooling),
+        "RoutingEngine::is_account_cooling",
+        format!("Account now cooling: {}", now_cooling),
         now_cooling,
     );
 
     // 5. 检查冷却剩余时间
-    let remaining = engine.provider_cooldown_remaining("openai");
+    let remaining = engine.account_cooldown_remaining(&account_id);
     chain.add_step(
         "keycompute-routing",
-        "RoutingEngine::provider_cooldown_remaining",
+        "RoutingEngine::account_cooldown_remaining",
         format!("Remaining cooldown: {:?}", remaining),
         remaining.is_some(),
     );
 
-    // 6. 其他 Provider 不受影响
-    let claude_cooling = engine.is_provider_cooling("claude");
+    // 6. 其他账号不受影响
+    let other_account = Uuid::new_v4();
+    let other_cooling = engine.is_account_cooling(&other_account);
     chain.add_step(
         "keycompute-routing",
-        "CooldownManager::isolation",
-        format!("Claude cooling: {}", claude_cooling),
-        !claude_cooling,
+        "AccountStateStore::isolation",
+        format!("Other account cooling: {}", other_cooling),
+        !other_cooling,
     );
 
     chain.print_report();
@@ -226,9 +220,8 @@ async fn test_routing_account_cooldown() {
     // 1. 创建引擎
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
 
-    let engine = RoutingEngine::new(account_states, provider_health, cooldown.clone());
+    let engine = RoutingEngine::new(account_states.clone(), provider_health);
 
     // 2. 测试账号冷却
     let account_id = Uuid::new_v4();
@@ -242,15 +235,11 @@ async fn test_routing_account_cooldown() {
     );
 
     // 3. 设置账号冷却
-    cooldown.set_account_cooldown(
-        account_id,
-        Some(std::time::Duration::from_secs(30)),
-        CooldownReason::RpmLimitExceeded,
-    );
+    account_states.set_cooldown(account_id, 30);
 
     chain.add_step(
-        "keycompute-runtime",
-        "CooldownManager::set_account_cooldown",
+        "keycompute-routing",
+        "AccountStateStore::set_cooldown",
         "Account cooldown set",
         true,
     );
@@ -285,8 +274,7 @@ fn test_routing_config() {
     // 路由权重已硬编码，验证引擎可以正常创建和工作
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
-    let engine = RoutingEngine::new(account_states, provider_health, cooldown);
+    let engine = RoutingEngine::new(account_states, provider_health);
 
     chain.add_step(
         "keycompute-routing",
@@ -310,14 +298,13 @@ async fn test_routing_unhealthy_provider_filtering() {
     // 1. 创建引擎
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
 
     // 2. 让 claude 变得不健康
     for _ in 0..10 {
         provider_health.record_failure("claude");
     }
 
-    let engine = RoutingEngine::new(account_states, provider_health.clone(), cooldown);
+    let engine = RoutingEngine::new(account_states, provider_health.clone());
 
     // 3. 检查 claude 健康状态
     let claude_healthy = engine.is_provider_healthy("claude");

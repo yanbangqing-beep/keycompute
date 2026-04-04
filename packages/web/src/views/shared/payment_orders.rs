@@ -145,7 +145,7 @@ pub fn PaymentOrders() -> Element {
                                                     }
                                                 }
                                             }
-                                            td { "¥{o.amount:.2}" }
+                                            td { "¥{o.amount}" }
                                             td {
                                                 Badge {
                                                     variant: status_to_variant(&o.status),

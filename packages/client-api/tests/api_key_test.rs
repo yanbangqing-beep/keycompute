@@ -20,8 +20,7 @@ async fn test_list_my_api_keys_success() {
                 "id": "key_001",
                 "name": "Development Key",
                 "key_preview": "sk-...abcd",
-                "revoked": false,
-                "revoked_at": null,
+                "is_active": true,
                 "expires_at": "2024-12-31T23:59:59Z",
                 "last_used_at": "2024-01-15T10:30:00Z",
                 "created_at": "2024-01-01T00:00:00Z"
@@ -30,8 +29,7 @@ async fn test_list_my_api_keys_success() {
                 "id": "key_002",
                 "name": "Production Key",
                 "key_preview": "sk-...efgh",
-                "revoked": false,
-                "revoked_at": null,
+                "is_active": true,
                 "expires_at": null,
                 "last_used_at": null,
                 "created_at": "2024-01-10T00:00:00Z"
@@ -41,7 +39,7 @@ async fn test_list_my_api_keys_success() {
         .await;
 
     let result = api_key_api
-        .list_my_api_keys(fixtures::TEST_ACCESS_TOKEN)
+        .list_my_api_keys(false, fixtures::TEST_ACCESS_TOKEN)
         .await;
 
     assert!(result.is_ok());
@@ -49,7 +47,7 @@ async fn test_list_my_api_keys_success() {
     assert_eq!(keys.len(), 2);
     assert_eq!(keys[0].name, "Development Key");
     assert_eq!(keys[0].key_preview, "sk-...abcd");
-    assert!(!keys[0].revoked);
+    assert!(!keys[0].revoked());
     assert_eq!(keys[1].name, "Production Key");
 }
 
@@ -65,7 +63,7 @@ async fn test_list_my_api_keys_empty() {
         .await;
 
     let result = api_key_api
-        .list_my_api_keys(fixtures::TEST_ACCESS_TOKEN)
+        .list_my_api_keys(false, fixtures::TEST_ACCESS_TOKEN)
         .await;
 
     assert!(result.is_ok());
@@ -85,7 +83,7 @@ async fn test_list_my_api_keys_unauthorized() {
         .mount(&mock_server)
         .await;
 
-    let result = api_key_api.list_my_api_keys("invalid_token").await;
+    let result = api_key_api.list_my_api_keys(false, "invalid_token").await;
 
     assert!(matches!(result.unwrap_err(), ClientError::Unauthorized(_)));
 }
@@ -104,12 +102,14 @@ async fn test_create_api_key_success() {
         .and(path("/api/v1/keys"))
         .and(body_json(&expected_body))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "key_new_001",
+            "success": true,
+            "message": "API Key created successfully",
+            "key_id": "key_new_001",
             "name": "New API Key",
-            "api_key": "sk-live-abcdefghijklmnopqrstuvwxyz123456",
-            "key_preview": "sk-...6",
+            "key": "sk-live-abcdefghijklmnopqrstuvwxyz123456",
             "expires_at": null,
-            "created_at": "2024-01-20T00:00:00Z"
+            "created_at": "2024-01-20T00:00:00Z",
+            "never_expires": true
         })))
         .mount(&mock_server)
         .await;
@@ -123,7 +123,6 @@ async fn test_create_api_key_success() {
     let resp = result.unwrap();
     assert_eq!(resp.name, "New API Key");
     assert_eq!(resp.api_key, "sk-live-abcdefghijklmnopqrstuvwxyz123456");
-    assert_eq!(resp.key_preview, "sk-...6");
 }
 
 #[tokio::test]
@@ -140,12 +139,14 @@ async fn test_create_api_key_with_expiration() {
         .and(path("/api/v1/keys"))
         .and(body_json(&expected_body))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "key_temp_001",
+            "success": true,
+            "message": "API Key created successfully",
+            "key_id": "key_temp_001",
             "name": "Temporary Key",
-            "api_key": "sk-temp-xyz789",
-            "key_preview": "sk-...789",
+            "key": "sk-temp-xyz789",
             "expires_at": "2024-06-30T23:59:59Z",
-            "created_at": "2024-01-20T00:00:00Z"
+            "created_at": "2024-01-20T00:00:00Z",
+            "never_expires": false
         })))
         .mount(&mock_server)
         .await;

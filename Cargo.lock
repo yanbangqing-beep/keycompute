@@ -3586,6 +3586,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "dashmap",
  "keycompute-db",
  "keycompute-runtime",
  "keycompute-types",
@@ -3880,6 +3881,7 @@ dependencies = [
  "chrono",
  "futures",
  "keycompute-provider-trait",
+ "keycompute-routing",
  "keycompute-runtime",
  "keycompute-types",
  "reqwest",

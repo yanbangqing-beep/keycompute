@@ -1,28 +1,26 @@
 //! 账号状态管理
 //!
-//! 管理账号的错误计数、冷却状态、RPM 等运行时状态。
+//! 管理账号的冷却状态和错误计数（用于管理员调试）。
 //! Gateway 写入，Routing 只读。
+//!
+//! 注意：冷却机制为纯手动触发，只能通过 API 设置冷却状态。
+//! 已移除 RPM 负载均衡逻辑。
 
 use dashmap::DashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 /// 账号状态
+///
+/// 简化的账号运行时状态，仅保留冷却标记和调试用的错误计数。
 #[derive(Debug, Clone, Default)]
 pub struct AccountState {
-    /// 连续错误计数
-    pub error_count: u32,
-    /// 总请求数
-    pub total_requests: u32,
-    /// 最后一次错误时间
-    pub last_error_at: Option<Instant>,
     /// 冷却直到时间
     pub cooldown_until: Option<Instant>,
-    /// 当前 RPM（每分钟请求数）
-    pub current_rpm: u32,
-    /// 最后一次请求时间
-    pub last_request_at: Option<Instant>,
+    /// 错误计数（仅用于管理员调试测试）
+    pub error_count: u32,
+    /// 最后一次错误时间（仅用于管理员调试测试）
+    pub last_error_at: Option<Instant>,
 }
 
 impl AccountState {
@@ -53,14 +51,11 @@ impl AccountState {
 
 /// 账号状态存储
 ///
-/// 使用 DashMap 实现并发安全的读写
+/// 使用 DashMap 实现并发安全的读写。
+/// 仅管理手动冷却状态和调试用的错误计数。
 #[derive(Debug)]
 pub struct AccountStateStore {
     states: DashMap<Uuid, AccountState>,
-    /// 触发冷却的错误阈值
-    cooldown_threshold: AtomicU32,
-    /// 冷却持续时间
-    cooldown_duration: Duration,
 }
 
 impl Default for AccountStateStore {
@@ -74,54 +69,43 @@ impl AccountStateStore {
     pub fn new() -> Self {
         Self {
             states: DashMap::new(),
-            cooldown_threshold: AtomicU32::new(3),
-            cooldown_duration: Duration::from_secs(60),
         }
     }
 
-    /// 创建带自定义配置的存储
-    pub fn with_config(cooldown_threshold: u32, cooldown_duration_secs: u64) -> Self {
-        Self {
-            states: DashMap::new(),
-            cooldown_threshold: AtomicU32::new(cooldown_threshold),
-            cooldown_duration: Duration::from_secs(cooldown_duration_secs),
-        }
-    }
-
-    /// Gateway 调用：标记错误
+    /// 手动设置账号冷却状态
     ///
-    /// 增加错误计数，如果超过阈值则进入冷却状态
-    pub fn mark_error(&self, account_id: Uuid) {
-        let threshold = self.cooldown_threshold.load(Ordering::Relaxed);
-        let duration = self.cooldown_duration;
-
+    /// 通过 API 调用触发，立即进入冷却状态
+    pub fn set_cooldown(&self, account_id: Uuid, duration_secs: u64) {
+        let duration = Duration::from_secs(duration_secs);
         self.states
             .entry(account_id)
             .and_modify(|state| {
-                state.error_count += 1;
-                state.last_error_at = Some(Instant::now());
-
-                // 错误次数超过阈值则进入冷却
-                if state.error_count >= threshold {
-                    state.cooldown_until = Some(Instant::now() + duration);
-                    tracing::warn!(
-                        account_id = %account_id,
-                        error_count = state.error_count,
-                        "Account entered cooldown state"
-                    );
-                }
+                state.cooldown_until = Some(Instant::now() + duration);
+                tracing::info!(
+                    account_id = %account_id,
+                    duration_secs = duration_secs,
+                    "Account manually entered cooldown state"
+                );
             })
             .or_insert_with(|| {
                 let mut state = AccountState::new();
-                state.error_count = 1;
-                state.last_error_at = Some(Instant::now());
+                state.cooldown_until = Some(Instant::now() + duration);
                 state
             });
     }
 
+    /// 清除账号冷却状态
+    pub fn clear_cooldown(&self, account_id: Uuid) {
+        self.states.entry(account_id).and_modify(|state| {
+            state.cooldown_until = None;
+            state.error_count = 0;
+            tracing::info!(account_id = %account_id, "Account cooldown cleared");
+        });
+    }
+
     /// Gateway 调用：标记成功
     ///
-    /// 重置错误计数，清除冷却状态
+    /// 清除冷却状态和错误计数
     pub fn mark_success(&self, account_id: Uuid) {
         self.states
             .entry(account_id)
@@ -140,31 +124,22 @@ impl AccountStateStore {
             .or_default();
     }
 
-    /// Gateway 调用：记录请求
+    /// 管理员调试：标记错误（仅用于账号连接测试）
     ///
-    /// 更新 RPM 计数
-    pub fn record_request(&self, account_id: Uuid) {
-        let now = Instant::now();
-
+    /// 仅记录错误计数和时间，不触发冷却。
+    pub fn mark_error(&self, account_id: Uuid) {
         self.states
             .entry(account_id)
             .and_modify(|state| {
-                state.last_request_at = Some(now);
-                // 简单的 RPM 估算（实际应该使用滑动窗口）
-                state.current_rpm += 1;
+                state.error_count += 1;
+                state.last_error_at = Some(Instant::now());
             })
-            .or_insert_with(|| AccountState {
-                last_request_at: Some(now),
-                current_rpm: 1,
-                ..Default::default()
+            .or_insert_with(|| {
+                let mut state = AccountState::new();
+                state.error_count = 1;
+                state.last_error_at = Some(Instant::now());
+                state
             });
-    }
-
-    /// Routing 调用：只读快照
-    ///
-    /// 获取账号状态的只读副本
-    pub fn snapshot(&self, account_id: &Uuid) -> Option<AccountState> {
-        self.states.get(account_id).map(|s| s.clone())
     }
 
     /// Routing 调用：检查是否在冷却中
@@ -200,6 +175,15 @@ impl AccountStateStore {
             .collect()
     }
 
+    /// 获取所有在冷却中的账号
+    pub fn cooling_accounts(&self) -> Vec<(Uuid, AccountState)> {
+        self.states
+            .iter()
+            .filter(|entry| entry.value().is_cooling_down())
+            .map(|entry| (*entry.key(), entry.value().clone()))
+            .collect()
+    }
+
     /// 清理过期的冷却状态（可由后台任务定期调用）
     pub fn cleanup_expired_cooldowns(&self) {
         let now = Instant::now();
@@ -224,76 +208,97 @@ mod tests {
         assert_eq!(state.error_count, 0);
         assert!(state.last_error_at.is_none());
         assert!(state.cooldown_until.is_none());
-        assert_eq!(state.current_rpm, 0);
+        assert!(!state.is_cooling_down());
     }
 
     #[test]
     fn test_mark_error() {
-        let store = AccountStateStore::with_config(2, 60);
+        let store = AccountStateStore::new();
         let account_id = Uuid::new_v4();
 
-        // 第一次错误
+        // 第一次错误（仅用于调试）
         store.mark_error(account_id);
-        let state = store.snapshot(&account_id).unwrap();
+        let state = store.get(&account_id);
         assert_eq!(state.error_count, 1);
+        // 错误不会自动触发冷却
         assert!(!state.is_cooling_down());
 
-        // 第二次错误（达到阈值）
+        // 第二次错误
         store.mark_error(account_id);
-        let state = store.snapshot(&account_id).unwrap();
+        let state = store.get(&account_id);
         assert_eq!(state.error_count, 2);
+        // 仍然不会自动冷却
+        assert!(!state.is_cooling_down());
+
+        // 手动设置冷却
+        store.set_cooldown(account_id, 60);
+        let state = store.get(&account_id);
         assert!(state.is_cooling_down());
     }
 
     #[test]
     fn test_mark_success() {
-        let store = AccountStateStore::with_config(2, 60);
+        let store = AccountStateStore::new();
         let account_id = Uuid::new_v4();
 
-        // 标记错误（未达到阈值）
+        // 标记错误
         store.mark_error(account_id);
         assert!(!store.is_cooling_down(&account_id));
 
-        // 标记成功清除错误
+        // 标记成功清除错误和冷却
         store.mark_success(account_id);
-        let state = store.snapshot(&account_id).unwrap();
+        let state = store.get(&account_id);
         assert_eq!(state.error_count, 0);
         assert!(!state.is_cooling_down());
     }
 
     #[test]
-    fn test_record_request() {
+    fn test_set_cooldown() {
         let store = AccountStateStore::new();
         let account_id = Uuid::new_v4();
 
-        store.record_request(account_id);
-        let state = store.snapshot(&account_id).unwrap();
-        assert_eq!(state.current_rpm, 1);
-        assert!(state.last_request_at.is_some());
+        // 初始状态不在冷却中
+        assert!(!store.is_cooling_down(&account_id));
+
+        // 设置冷却
+        store.set_cooldown(account_id, 60);
+        let state = store.get(&account_id);
+        assert!(state.is_cooling_down());
+        assert!(state.cooldown_remaining().is_some());
     }
 
     #[test]
     fn test_available_accounts() {
-        let store = AccountStateStore::with_config(1, 60);
+        let store = AccountStateStore::new();
         let id1 = Uuid::new_v4();
         let id2 = Uuid::new_v4();
 
-        // id1 第一次错误（阈值是1，所以一次错误就会冷却）
-        store.mark_error(id1);
-
-        // 注意：第一次错误时，or_insert_with 创建的新状态 error_count=1
-        // 但不会立即触发冷却，因为 or_insert_with 不会执行 and_modify 中的逻辑
-        // 需要第二次错误才会触发冷却
-        store.mark_error(id1);
+        // 手动设置 id1 冷却
+        store.set_cooldown(id1, 60);
 
         // 验证 id1 确实在冷却中
-        assert!(
-            store.is_cooling_down(&id1),
-            "id1 should be cooling down after 2 errors"
-        );
+        assert!(store.is_cooling_down(&id1), "id1 should be cooling down");
 
         let available = store.available_accounts(&[id1, id2]);
         assert_eq!(available.len(), 1);
         assert_eq!(available[0], id2);
+    }
+
+    #[test]
+    fn test_cooling_accounts() {
+        let store = AccountStateStore::new();
+        let id1 = Uuid::new_v4();
+        let id2 = Uuid::new_v4();
+
+        // 设置 id1 冷却
+        store.set_cooldown(id1, 60);
+
+        // 获取冷却中的账号列表
+        let cooling = store.cooling_accounts();
+        assert_eq!(cooling.len(), 1);
+        assert_eq!(cooling[0].0, id1);
+
+        // id2 不在冷却中
+        assert!(!store.is_cooling_down(&id2));
     }
 }

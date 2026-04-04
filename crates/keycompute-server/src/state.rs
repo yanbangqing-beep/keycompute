@@ -6,10 +6,8 @@ use keycompute_auth::{AuthService, EmailService, JwtValidator, ProduceAiKeyValid
 use keycompute_billing::BillingService;
 use keycompute_emailserver::EmailConfig;
 use keycompute_provider_trait::ProviderAdapter;
-use keycompute_routing::RoutingEngine;
-use keycompute_runtime::{
-    AccountStateStore, CooldownManager, ProviderHealthStore, set_global_crypto,
-};
+use keycompute_routing::{AccountStateStore, ProviderHealthStore, RoutingEngine};
+use keycompute_runtime::set_global_crypto;
 use llm_gateway::{GatewayBuilder, GatewayExecutor, HttpProxy, ProxyConfig as HttpProxyConfig};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -131,8 +129,6 @@ pub struct AppState {
     pub account_states: Arc<AccountStateStore>,
     /// Provider 健康状态存储
     pub provider_health: Arc<ProviderHealthStore>,
-    /// 冷却管理器
-    pub cooldown: Arc<CooldownManager>,
     /// 路由引擎
     pub routing: Arc<RoutingEngine>,
     /// Gateway 执行器（唯一执行层）
@@ -156,7 +152,6 @@ impl std::fmt::Debug for AppState {
             .field("pricing", &"<PricingService>")
             .field("account_states", &self.account_states)
             .field("provider_health", &"<ProviderHealthStore>")
-            .field("cooldown", &"<CooldownManager>")
             .field("routing", &"<RoutingEngine>")
             .field("gateway", &"<GatewayExecutor>")
             .field("http_proxy", &"<HttpProxy>")
@@ -192,13 +187,11 @@ impl AppState {
         // 创建运行时状态存储
         let account_states = Arc::new(AccountStateStore::new());
         let provider_health = Arc::new(ProviderHealthStore::new());
-        let cooldown = Arc::new(CooldownManager::new());
 
-        // 创建路由引擎（集成 ProviderHealthStore 和 CooldownManager）
+        // 创建路由引擎（集成 ProviderHealthStore 和 AccountStateStore）
         let routing_engine = Arc::new(RoutingEngine::new(
             Arc::clone(&account_states),
             Arc::clone(&provider_health),
-            Arc::clone(&cooldown),
         ));
 
         // 创建 Internal HTTP Proxy（统一上游连接管理，支持配置）
@@ -239,7 +232,6 @@ impl AppState {
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,
-            cooldown,
             routing: routing_engine,
             gateway,
             http_proxy,
@@ -327,13 +319,11 @@ impl AppState {
         // 创建运行时状态存储
         let account_states = Arc::new(AccountStateStore::new());
         let provider_health = Arc::new(ProviderHealthStore::new());
-        let cooldown = Arc::new(CooldownManager::new());
 
         // 创建带数据库连接的路由引擎
         let routing_engine = Arc::new(RoutingEngine::with_pool(
             Arc::clone(&account_states),
             Arc::clone(&provider_health),
-            Arc::clone(&cooldown),
             Arc::clone(&pool),
         ));
 
@@ -395,7 +385,6 @@ impl AppState {
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,
-            cooldown,
             routing: routing_engine,
             gateway,
             http_proxy,
@@ -429,13 +418,11 @@ impl AppState {
         // 创建运行时状态存储
         let account_states = Arc::new(AccountStateStore::new());
         let provider_health = Arc::new(ProviderHealthStore::new());
-        let cooldown = Arc::new(CooldownManager::new());
 
-        // 创建路由引擎（集成 ProviderHealthStore 和 CooldownManager）
+        // 创建路由引擎（集成 ProviderHealthStore 和 AccountStateStore）
         let routing_engine = Arc::new(RoutingEngine::new(
             Arc::clone(&account_states),
             Arc::clone(&provider_health),
-            Arc::clone(&cooldown),
         ));
 
         // 创建 Internal HTTP Proxy（支持配置）
@@ -467,7 +454,6 @@ impl AppState {
             pricing: Arc::new(pricing_service),
             account_states: Arc::clone(&account_states),
             provider_health,
-            cooldown,
             routing: routing_engine,
             gateway,
             http_proxy,

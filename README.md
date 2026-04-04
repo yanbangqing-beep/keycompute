@@ -243,6 +243,17 @@ curl https://your-domain/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
+# 示例
+```bash
+curl -s http://192.168.100.100:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-329939d678d24433bc0277311c576481bc23b86ebc724354" \
+  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"hello"}], "stream":true}'
+
+data: {"id":"chatcmpl-7370f2606a6a4f5fa516fe54d9196c9d-kc","object":"chat.completion.chunk","created":1775231430,"model":"deepseek-chat","system_fingerprint":"fp_deepseek","choices":[{"index":0,"delta":{"role":"assistant","content":"你好！👋 很高兴见到你！  \n有什么我可以帮助你的吗？无论是回答问题、聊天，还是协助处理任务，我都在这里～ 😊"},"finish_reason":null}]}
+
+```
+
 # 列出模型
 curl https://your-domain/v1/models \
   -H "Authorization: Bearer sk-xxx"

@@ -56,6 +56,19 @@ impl DebugApi {
             .post_json("/debug/gateway/health", &serde_json::json!({}), Some(token))
             .await
     }
+
+    /// 重置所有 Provider 健康状态和冷却状态
+    ///
+    /// 用于调试，清除所有 Provider 和账号的健康状态和冷却状态
+    pub async fn reset_health(&self, token: &str) -> Result<ResetHealthResponse> {
+        self.client
+            .post_json(
+                "/debug/providers/reset",
+                &serde_json::json!({}),
+                Some(token),
+            )
+            .await
+    }
 }
 
 /// 路由调试信息
@@ -142,4 +155,13 @@ pub struct HealthCheckResponse {
     pub checked_providers: Vec<String>,
     pub healthy_providers: Vec<String>,
     pub unhealthy_providers: Vec<String>,
+}
+
+/// 重置健康状态响应
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResetHealthResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 消息
+    pub message: String,
 }

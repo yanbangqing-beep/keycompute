@@ -11,7 +11,10 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, State},
-    response::sse::{Event, Sse},
+    response::{
+        IntoResponse,
+        sse::{Event, Sse},
+    },
 };
 use futures::stream::Stream;
 use keycompute_db::models::account::Account;
@@ -295,7 +298,7 @@ pub async fn chat_completions(
     auth: AuthExtractor,
     request_id: RequestId,
     Json(request): Json<ChatCompletionRequest>,
-) -> Result<Sse<impl Stream<Item = std::result::Result<Event, Infallible>>>> {
+) -> Result<axum::response::Response> {
     // 1. 构建 PricingSnapshot
     let pricing = state
         .pricing
@@ -345,31 +348,164 @@ pub async fn chat_completions(
         "Chat completion request"
     );
 
-    // 5. 执行
-    let rx = state
-        .gateway
-        .execute(
+    // 5. 执行（带超时保护）
+    tracing::info!(
+        request_id = %request_id.0,
+        "Starting gateway execute"
+    );
+
+    let rx = match tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        state.gateway.execute(
             Arc::clone(&ctx),
             plan,
             Arc::clone(&state.account_states),
             Some(Arc::clone(&state.provider_health)),
-        )
-        .await
-        .map_err(|e| ApiError::Internal(format!("Execution failed: {}", e)))?;
+        ),
+    )
+    .await
+    {
+        Ok(result) => result.map_err(|e| ApiError::Internal(format!("Execution failed: {}", e)))?,
+        Err(_) => {
+            tracing::error!(
+                request_id = %request_id.0,
+                "Gateway execute timeout after 120s"
+            );
+            return Err(ApiError::Internal("Gateway execute timeout".to_string()));
+        }
+    };
 
-    // 6. 返回 SSE 流
-    let billing = Arc::clone(&state.billing);
-    let stream = create_openai_stream(
-        rx,
-        ctx,
-        request.model,
-        primary_provider,
-        primary_account_id,
-        billing,
-        request.stream_options,
+    tracing::info!(
+        request_id = %request_id.0,
+        "Gateway execute returned, creating response"
     );
 
-    Ok(Sse::new(stream))
+    // 6. 根据 stream 参数返回不同类型的响应
+    let billing = Arc::clone(&state.billing);
+    let is_stream = request.stream;
+    let model = request.model;
+    let stream_options = request.stream_options;
+
+    if is_stream {
+        // 流式响应
+        let stream = create_openai_stream(
+            rx,
+            ctx,
+            model,
+            primary_provider,
+            primary_account_id,
+            billing,
+            stream_options,
+        );
+        Ok(Sse::new(stream).into_response())
+    } else {
+        // 非流式响应：收集所有内容后返回完整 JSON
+        let response = create_openai_response(
+            rx,
+            ctx,
+            model,
+            primary_provider,
+            primary_account_id,
+            billing,
+        )
+        .await?;
+        Ok(Json(response).into_response())
+    }
+}
+
+/// 创建 OpenAI 格式的非流式响应
+async fn create_openai_response(
+    mut rx: tokio::sync::mpsc::Receiver<keycompute_provider_trait::StreamEvent>,
+    ctx: Arc<RequestContext>,
+    model: String,
+    provider_name: String,
+    account_id: uuid::Uuid,
+    billing: Arc<keycompute_billing::BillingService>,
+) -> Result<ChatCompletionResponse> {
+    let completion_id = format!(
+        "chatcmpl-{}-kc",
+        uuid::Uuid::new_v4()
+            .to_string()
+            .replace("-", "")
+            .to_lowercase()
+    );
+    let created = chrono::Utc::now().timestamp();
+
+    let mut content = String::new();
+    let mut finish_reason: Option<String> = None;
+    let mut status = "success".to_string();
+
+    // 收集所有内容
+    while let Some(event) = rx.recv().await {
+        match event {
+            keycompute_provider_trait::StreamEvent::Delta {
+                content: delta,
+                finish_reason: reason,
+            } => {
+                content.push_str(&delta);
+                if reason.is_some() {
+                    finish_reason = reason;
+                }
+            }
+            keycompute_provider_trait::StreamEvent::Done => {
+                break;
+            }
+            keycompute_provider_trait::StreamEvent::Error { message } => {
+                status = "error".to_string();
+                tracing::error!(
+                    request_id = %ctx.request_id,
+                    error = %message,
+                    "Stream error during non-streaming response"
+                );
+                let _ = billing
+                    .finalize_and_trigger_distribution(
+                        &ctx,
+                        &provider_name,
+                        account_id,
+                        &status,
+                        ctx.user_id,
+                    )
+                    .await;
+                return Err(ApiError::Internal(message));
+            }
+            _ => {}
+        }
+    }
+
+    // 执行 billing
+    let _ = billing
+        .finalize_and_trigger_distribution(&ctx, &provider_name, account_id, &status, ctx.user_id)
+        .await;
+
+    // 获取用量信息
+    let (prompt_tokens, completion_tokens) = ctx.usage.snapshot();
+
+    Ok(ChatCompletionResponse {
+        id: completion_id,
+        object: "chat.completion".to_string(),
+        created,
+        model,
+        choices: vec![ChatCompletionChoice {
+            index: 0,
+            message: ChatCompletionMessage {
+                role: "assistant".to_string(),
+                content: Some(content),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            finish_reason,
+            logprobs: None,
+        }],
+        usage: CompletionUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            prompt_tokens_details: None,
+            completion_tokens_details: None,
+        },
+        system_fingerprint: Some(format!("fp_{}", provider_name)),
+    })
 }
 
 /// 创建 OpenAI 格式的 SSE 流
@@ -384,6 +520,7 @@ fn create_openai_stream(
 ) -> impl Stream<Item = std::result::Result<Event, Infallible>> {
     async_stream::stream! {
         let mut status = "success".to_string();
+        let mut completed = false; // 跟踪流是否正常完成
         let mut first_chunk = true;
         let completion_id = format!("chatcmpl-{}-kc", uuid::Uuid::new_v4().to_string().replace("-", "").to_lowercase());
         let created = chrono::Utc::now().timestamp();
@@ -424,13 +561,44 @@ fn create_openai_stream(
                     let data = serde_json::to_string(&chunk).unwrap();
                     yield Ok(Event::default().data(data));
 
-                    // 如果有 finish_reason，这是最后一块
+                    // 如果有 finish_reason，这是最后一块，发送 [DONE] 并结束
                     if finish_reason.is_some() {
+                        completed = true;
+                        // 执行 billing
+                        let _ = billing.finalize_and_trigger_distribution(
+                            &ctx, &provider_name, account_id, &status, ctx.user_id
+                        ).await;
+
+                        // 如果需要包含用量信息
+                        if stream_options.as_ref().map(|o| o.include_usage).unwrap_or(false) {
+                            let (input_tokens, output_tokens) = ctx.usage.snapshot();
+                            let usage_chunk = ChatCompletionChunk {
+                                id: completion_id.clone(),
+                                object: "chat.completion.chunk".to_string(),
+                                created,
+                                model: model.clone(),
+                                system_fingerprint: Some(format!("fp_{}", provider_name)),
+                                choices: vec![],
+                                usage: Some(CompletionUsage {
+                                    prompt_tokens: input_tokens,
+                                    completion_tokens: output_tokens,
+                                    total_tokens: input_tokens + output_tokens,
+                                    prompt_tokens_details: None,
+                                    completion_tokens_details: None,
+                                }),
+                            };
+                            let data = serde_json::to_string(&usage_chunk).unwrap();
+                            yield Ok(Event::default().data(data));
+                        }
+
+                        // 发送 [DONE] 标记
+                        yield Ok(Event::default().data("[DONE]"));
                         break;
                     }
                 }
                 keycompute_provider_trait::StreamEvent::Done => {
                     // 流正常结束
+                    completed = true;
                     let _ = billing.finalize_and_trigger_distribution(
                         &ctx, &provider_name, account_id, &status, ctx.user_id
                     ).await;
@@ -461,6 +629,7 @@ fn create_openai_stream(
                     break;
                 }
                 keycompute_provider_trait::StreamEvent::Error { message } => {
+                    completed = true;
                     status = "error".to_string();
                     let _ = billing.finalize_and_trigger_distribution(
                         &ctx, &provider_name, account_id, &status, ctx.user_id
@@ -480,11 +649,11 @@ fn create_openai_stream(
             }
         }
 
-        // 流意外结束
-        if status == "success" {
+        // 流意外结束（channel 关闭但没有收到完成事件）
+        if !completed {
             tracing::warn!(
                 request_id = %ctx.request_id,
-                "Stream ended without Done/Error event"
+                "Stream ended without Done/Error/finish_reason event"
             );
             status = "incomplete".to_string();
             let _ = billing.finalize_and_trigger_distribution(

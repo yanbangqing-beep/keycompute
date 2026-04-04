@@ -15,7 +15,7 @@
 use crate::{GatewayConfig, HttpProxy, streaming::StreamPipeline};
 use futures::StreamExt;
 use keycompute_provider_trait::{HttpTransport, ProviderAdapter, StreamEvent, UpstreamRequest};
-use keycompute_runtime::{AccountStateStore, ProviderHealthStore};
+use keycompute_routing::{AccountStateStore, ProviderHealthStore};
 use keycompute_types::{ExecutionPlan, ExecutionTarget, KeyComputeError, RequestContext, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -129,10 +129,8 @@ impl GatewayExecutor {
                     return Ok(rx);
                 }
                 Err(e) => {
-                    // 失败：标记错误，继续 fallback
-                    account_states.mark_error(target.account_id);
-
-                    // 失败：更新 Provider 健康状态
+                    // 注意：不再自动标记错误，错误计数只能通过管理员手动测试 API 触发
+                    // 保留 Provider 健康状态更新用于路由评分
                     if let Some(ref health_store) = provider_health {
                         health_store.record_failure(&target.provider);
                     }
@@ -159,6 +157,13 @@ impl GatewayExecutor {
         target: &ExecutionTarget,
         tx: mpsc::Sender<StreamEvent>,
     ) -> Result<()> {
+        tracing::info!(
+            request_id = %ctx.request_id,
+            provider = %target.provider,
+            endpoint = %target.endpoint,
+            "try_execute: starting"
+        );
+
         // 获取 Provider
         let provider = self.providers.get(&target.provider).ok_or_else(|| {
             KeyComputeError::Internal(format!("Provider {} not found", target.provider))
@@ -175,8 +180,20 @@ impl GatewayExecutor {
         // 构建上游请求
         let request = self.build_upstream_request(ctx, target);
 
+        tracing::info!(
+            request_id = %ctx.request_id,
+            provider = %target.provider,
+            "try_execute: calling provider.stream_chat"
+        );
+
         // 执行流式请求（传入 transport）
         let mut stream = provider.stream_chat(transport.as_ref(), request).await?;
+
+        tracing::info!(
+            request_id = %ctx.request_id,
+            provider = %target.provider,
+            "try_execute: stream started, processing events"
+        );
 
         // 流处理管道
         let mut pipeline = StreamPipeline::new(ctx.request_id);
@@ -194,12 +211,23 @@ impl GatewayExecutor {
                     // 转发给客户端
                     let event = StreamEvent::Delta {
                         content,
-                        finish_reason,
+                        finish_reason: finish_reason.clone(),
                     };
                     pipeline.process_event(&event);
                     tx.send(event)
                         .await
                         .map_err(|_| KeyComputeError::Internal("Send error".into()))?;
+
+                    // 如果有 finish_reason，发送 Done 并退出
+                    if finish_reason.is_some() {
+                        tracing::debug!(
+                            request_id = %ctx.request_id,
+                            finish_reason = ?finish_reason,
+                            "try_execute: received finish_reason, sending Done and exiting"
+                        );
+                        // 注意：不发送 Done 事件，让 handler 根据 finish_reason 结束
+                        break;
+                    }
                 }
                 StreamEvent::Usage {
                     input_tokens,
@@ -214,17 +242,32 @@ impl GatewayExecutor {
                     }
                 }
                 StreamEvent::Done => {
+                    tracing::debug!(
+                        request_id = %ctx.request_id,
+                        "try_execute: received Done event"
+                    );
                     tx.send(StreamEvent::Done)
                         .await
                         .map_err(|_| KeyComputeError::Internal("Send error".into()))?;
                     break;
                 }
                 StreamEvent::Error { message } => {
+                    tracing::error!(
+                        request_id = %ctx.request_id,
+                        message = %message,
+                        "try_execute: received Error event"
+                    );
                     return Err(KeyComputeError::ProviderError(message));
                 }
                 _ => {}
             }
         }
+
+        tracing::debug!(
+            request_id = %ctx.request_id,
+            provider = %target.provider,
+            "try_execute: completed successfully"
+        );
 
         Ok(())
     }

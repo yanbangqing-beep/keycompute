@@ -61,7 +61,10 @@ async fn test_update_system_settings_success() {
 
     assert!(result.is_ok());
     let settings = result.unwrap();
-    assert!(settings.contains_key("site_name"));
+    assert_eq!(
+        settings.get("site_name").unwrap().to_string_value(),
+        "Updated Name"
+    );
 }
 
 #[tokio::test]
@@ -153,8 +156,22 @@ async fn test_get_public_settings_success() {
         .and(path("/api/v1/settings/public"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "site_name": "KeyCompute",
-            "version": "1.0.0",
-            "registration_enabled": true
+            "site_description": null,
+            "site_logo_url": null,
+            "site_favicon_url": null,
+            "api_base_url": null,
+            "allow_registration": true,
+            "email_verification_required": false,
+            "maintenance_mode": false,
+            "maintenance_message": null,
+            "alipay_enabled": false,
+            "wechatpay_enabled": false,
+            "system_notice": null,
+            "system_notice_enabled": false,
+            "footer_content": null,
+            "about_content": null,
+            "terms_of_service_url": null,
+            "privacy_policy_url": null
         })))
         .mount(&mock_server)
         .await;
@@ -163,8 +180,8 @@ async fn test_get_public_settings_success() {
 
     assert!(result.is_ok());
     let settings = result.unwrap();
-    assert!(settings.contains_key("site_name"));
-    assert!(settings.contains_key("version"));
+    assert_eq!(settings.site_name, "KeyCompute");
+    assert!(settings.allow_registration);
 }
 
 #[tokio::test]
@@ -172,14 +189,24 @@ async fn test_get_public_settings_empty() {
     let (client, mock_server) = create_test_client().await;
     let settings_api = SettingsApi::new(&client);
 
+    // 公开设置返回空对象时，必需字段会有默认值
     Mock::given(method("GET"))
         .and(path("/api/v1/settings/public"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "site_name": "",
+            "allow_registration": false,
+            "email_verification_required": false,
+            "maintenance_mode": false,
+            "alipay_enabled": false,
+            "wechatpay_enabled": false,
+            "system_notice_enabled": false
+        })))
         .mount(&mock_server)
         .await;
 
     let result = settings_api.get_public_settings().await;
 
     assert!(result.is_ok());
-    assert!(result.unwrap().is_empty());
+    let settings = result.unwrap();
+    assert!(settings.site_name.is_empty());
 }

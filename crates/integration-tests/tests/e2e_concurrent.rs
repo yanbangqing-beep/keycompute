@@ -14,8 +14,7 @@ use integration_tests::common::VerificationChain;
 use integration_tests::mocks::provider::MockProviderFactory;
 use keycompute_provider_trait::{ProviderAdapter, UpstreamRequest};
 use keycompute_ratelimit::{RateLimitKey, RateLimitService};
-use keycompute_routing::RoutingEngine;
-use keycompute_runtime::{AccountStateStore, CooldownManager, CooldownReason, ProviderHealthStore};
+use keycompute_routing::{AccountStateStore, ProviderHealthStore, RoutingEngine};
 use keycompute_types::{PricingSnapshot, RequestContext};
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -53,8 +52,7 @@ fn create_test_context() -> RequestContext {
 fn create_test_engine() -> RoutingEngine {
     let account_states = Arc::new(AccountStateStore::new());
     let provider_health = Arc::new(ProviderHealthStore::new());
-    let cooldown = Arc::new(CooldownManager::new());
-    RoutingEngine::new(account_states, provider_health, cooldown)
+    RoutingEngine::new(account_states, provider_health)
 }
 
 // ============================================================================
@@ -578,56 +576,57 @@ async fn test_concurrent_cooldown_access() {
     let mut chain = VerificationChain::new();
     let concurrent_ops = 100;
 
-    // 1. 创建冷却管理器
-    let cooldown = Arc::new(CooldownManager::new());
+    // 1. 创建账号状态存储
+    let account_states = Arc::new(AccountStateStore::new());
 
-    // 2. 并发操作：设置冷却 + 检查冷却
+    // 2. 并发操作:设置冷却 + 检查冷却
     let mut tasks = JoinSet::new();
     let set_count = Arc::new(AtomicU64::new(0));
     let check_count = Arc::new(AtomicU64::new(0));
 
     for i in 0..concurrent_ops {
-        let c = cooldown.clone();
+        let states = account_states.clone();
         let set = set_count.clone();
         let check = check_count.clone();
+        let account_id = Uuid::from_u128(i as u128 % 10);
 
         tasks.spawn(async move {
             if i % 3 == 0 {
                 // 设置冷却
-                c.set_provider_cooldown(
-                    format!("provider-{}", i % 10),
-                    Some(Duration::from_secs(60)),
-                    CooldownReason::ConsecutiveErrors,
-                );
+                states.set_cooldown(account_id, 60);
                 set.fetch_add(1, Ordering::Relaxed);
             } else {
                 // 检查冷却
-                let _ = c.is_provider_cooling(&format!("provider-{}", i % 10));
+                let _ = states.is_cooling_down(&account_id);
                 check.fetch_add(1, Ordering::Relaxed);
             }
         });
     }
 
     // 3. 等待完成
-    while tasks.join_next().await.is_some() {}
+    while let Some(result) = tasks.join_next().await {
+        if let Err(e) = result {
+            tracing::error!("Task panicked: {:?}", e);
+        }
+    }
 
     let sets = set_count.load(Ordering::Relaxed);
     let checks = check_count.load(Ordering::Relaxed);
 
     // 4. 验证
     chain.add_step(
-        "keycompute-runtime",
-        "ConcurrentCooldown::operations",
+        "keycompute-routing",
+        "AccountStateStore::concurrent_ops",
         format!("Set operations: {}, Check operations: {}", sets, checks),
         sets + checks == concurrent_ops as u64,
     );
 
-    let cooling_providers = cooldown.cooling_providers();
+    let cooling_accounts = account_states.cooling_accounts();
     chain.add_step(
-        "keycompute-runtime",
-        "ConcurrentCooldown::providers_cooling",
-        format!("Providers in cooldown: {}", cooling_providers.len()),
-        !cooling_providers.is_empty(),
+        "keycompute-routing",
+        "AccountStateStore::accounts_cooling",
+        format!("Accounts in cooldown: {}", cooling_accounts.len()),
+        !cooling_accounts.is_empty(),
     );
 
     chain.print_report();
@@ -638,26 +637,21 @@ async fn test_concurrent_cooldown_access() {
 #[tokio::test]
 async fn test_concurrent_cooldown_expiry() {
     let mut chain = VerificationChain::new();
-    let providers = 20;
+    let accounts = 20;
 
-    // 1. 创建短时间冷却管理器
-    let cooldown = Arc::new(CooldownManager::with_default_duration(
-        Duration::from_millis(50),
-    ));
+    // 1. 创建账号状态存储
+    let account_states = Arc::new(AccountStateStore::new());
 
-    // 2. 设置所有 Provider 冷却
-    for i in 0..providers {
-        cooldown.set_provider_cooldown(
-            format!("provider-{}", i),
-            Some(Duration::from_millis(50)),
-            CooldownReason::Manual,
-        );
+    // 2. 设置所有账号冷却
+    for i in 0..accounts {
+        let account_id = Uuid::from_u128(i as u128);
+        account_states.set_cooldown(account_id, 60);
     }
 
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ConcurrentExpiry::all_set",
-        format!("All {} providers set to cooldown", providers),
+        format!("All {} accounts set to cooldown", accounts),
         true,
     );
 
@@ -665,53 +659,68 @@ async fn test_concurrent_cooldown_expiry() {
     let mut tasks = JoinSet::new();
     let initial_cooling = Arc::new(AtomicU64::new(0));
 
-    for i in 0..providers {
-        let c = cooldown.clone();
+    for i in 0..accounts {
+        let states = account_states.clone();
         let cooling = initial_cooling.clone();
+        let account_id = Uuid::from_u128(i as u128);
 
         tasks.spawn(async move {
-            if c.is_provider_cooling(&format!("provider-{}", i)) {
+            if states.is_cooling_down(&account_id) {
                 cooling.fetch_add(1, Ordering::Relaxed);
             }
         });
     }
 
-    while tasks.join_next().await.is_some() {}
+    while let Some(result) = tasks.join_next().await {
+        if let Err(e) = result {
+            tracing::error!("Task panicked: {:?}", e);
+        }
+    }
 
     let before = initial_cooling.load(Ordering::Relaxed);
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ConcurrentExpiry::before_expiry",
-        format!("Providers cooling before expiry: {}", before),
-        before == providers as u64,
+        format!("Accounts cooling before expiry: {}", before),
+        before == accounts as u64,
     );
 
-    // 4. 等待过期
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // 4. 清除冷却状态
+    for i in 0..accounts {
+        let account_id = Uuid::from_u128(i as u128);
+        account_states.clear_cooldown(account_id);
+    }
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
 
     // 5. 再次并发检查
     let mut tasks = JoinSet::new();
     let after_cooling = Arc::new(AtomicU64::new(0));
 
-    for i in 0..providers {
-        let c = cooldown.clone();
+    for i in 0..accounts {
+        let states = account_states.clone();
         let cooling = after_cooling.clone();
+        let account_id = Uuid::from_u128(i as u128);
 
         tasks.spawn(async move {
-            if c.is_provider_cooling(&format!("provider-{}", i)) {
+            if states.is_cooling_down(&account_id) {
                 cooling.fetch_add(1, Ordering::Relaxed);
             }
         });
     }
 
-    while tasks.join_next().await.is_some() {}
+    while let Some(result) = tasks.join_next().await {
+        if let Err(e) = result {
+            tracing::error!("Task panicked: {:?}", e);
+        }
+    }
 
     let after = after_cooling.load(Ordering::Relaxed);
     chain.add_step(
-        "keycompute-runtime",
+        "keycompute-routing",
         "ConcurrentExpiry::after_expiry",
-        format!("Providers cooling after expiry: {}", after),
-        after == 0, // 全部过期
+        format!("Accounts cooling after clear: {}", after),
+        after == 0, // 全部清除
     );
 
     chain.print_report();
@@ -732,7 +741,6 @@ async fn test_full_chain_concurrent_pressure() {
     let engine = Arc::new(create_test_engine());
     let provider = Arc::new(MockProviderFactory::create_openai());
     let transport = Arc::new(keycompute_provider_trait::DefaultHttpTransport::new());
-    let cooldown = Arc::new(CooldownManager::new());
 
     chain.add_step(
         "integration-tests",
@@ -752,7 +760,6 @@ async fn test_full_chain_concurrent_pressure() {
         let engine = engine.clone();
         let provider = provider.clone();
         let transport = transport.clone();
-        let cooldown = cooldown.clone();
         let stats = stats.clone();
 
         tasks.spawn(async move {
@@ -761,8 +768,8 @@ async fn test_full_chain_concurrent_pressure() {
 
             // Step 1: Routing
             if let Ok(plan) = engine.route(&ctx).await {
-                // Step 2: Check cooldown
-                if !cooldown.is_provider_cooling(&plan.primary.provider) {
+                // Step 2: Check account cooldown
+                if !engine.is_account_cooling(&plan.primary.account_id) {
                     // Step 3: Provider request
                     let request = UpstreamRequest::new(
                         &plan.primary.endpoint,
@@ -785,12 +792,7 @@ async fn test_full_chain_concurrent_pressure() {
                             stats.lock().unwrap().provider_successes += 1;
                         }
                     } else {
-                        // Provider failed, set cooldown
-                        cooldown.set_provider_cooldown(
-                            &plan.primary.provider,
-                            Some(Duration::from_secs(60)),
-                            CooldownReason::ConsecutiveErrors,
-                        );
+                        // Provider failed
                         stats.lock().unwrap().provider_failures += 1;
                     }
                 } else {
@@ -805,7 +807,11 @@ async fn test_full_chain_concurrent_pressure() {
     }
 
     // 4. 等待完成
-    while tasks.join_next().await.is_some() {}
+    while let Some(result) = tasks.join_next().await {
+        if let Err(e) = result {
+            tracing::error!("Task panicked: {:?}", e);
+        }
+    }
 
     let elapsed = start.elapsed();
     let guard = stats.lock().unwrap();

@@ -466,7 +466,8 @@ pub struct AccountInfo {
     pub name: String,
     pub provider: String, // openai, anthropic, etc.
     pub api_key_preview: String,
-    pub base_url: Option<String>,
+    /// 自定义 Base URL（Provider 端点地址）
+    pub api_base: Option<String>,
     pub models: Vec<String>,
     pub rpm_limit: i32,
     pub current_rpm: i32,
@@ -503,23 +504,22 @@ pub async fn list_accounts(
             // 从 ProviderHealthStore 获取真实健康状态
             let is_healthy = state.provider_health.is_healthy(&acc.provider);
 
-            // 从 AccountStateStore 获取实时 RPM
-            let account_state = state.account_states.get(&acc.id);
-            let current_rpm = account_state.current_rpm as i32;
+            // 检查账号是否在冷却中
+            let is_cooling = state.account_states.is_cooling_down(&acc.id);
 
             AccountInfo {
                 id: acc.id,
                 name: acc.name,
                 provider: acc.provider,
                 api_key_preview: acc.upstream_api_key_preview,
-                base_url: if acc.endpoint.is_empty() {
+                api_base: if acc.endpoint.is_empty() {
                     None
                 } else {
                     Some(acc.endpoint)
                 },
                 models: acc.models_supported,
                 rpm_limit: acc.rpm_limit,
-                current_rpm,
+                current_rpm: if is_cooling { -1 } else { 0 }, // -1 表示冷却中
                 is_active: acc.enabled,
                 is_healthy,
                 priority: acc.priority,
@@ -538,7 +538,8 @@ pub struct CreateAccountRequest {
     pub name: String,
     pub provider: String,
     pub api_key: String,
-    pub base_url: Option<String>,
+    /// 自定义 Base URL（Provider 端点地址）
+    pub api_base: Option<String>,
     pub models: Vec<String>,
     pub rpm_limit: Option<i32>,
     pub priority: Option<i32>,
@@ -582,7 +583,7 @@ pub async fn create_account(
         tenant_id: auth.tenant_id,
         provider: req.provider.clone(),
         name: req.name.clone(),
-        endpoint: req.base_url.clone().unwrap_or_default(),
+        endpoint: req.api_base.clone().unwrap_or_default(),
         upstream_api_key_encrypted: encrypted_key,
         upstream_api_key_preview: key_preview,
         rpm_limit: req.rpm_limit,
@@ -611,7 +612,8 @@ pub async fn create_account(
 pub struct UpdateAccountRequest {
     pub name: Option<String>,
     pub api_key: Option<String>,
-    pub base_url: Option<String>,
+    /// 自定义 Base URL（Provider 端点地址）
+    pub api_base: Option<String>,
     pub models: Option<Vec<String>>,
     pub rpm_limit: Option<i32>,
     pub is_active: Option<bool>,
@@ -665,7 +667,7 @@ pub async fn update_account(
 
     let db_req = DbUpdateAccountRequest {
         name: req.name.clone(),
-        endpoint: req.base_url.clone(),
+        endpoint: req.api_base.clone(),
         upstream_api_key_encrypted: encrypted_key,
         upstream_api_key_preview: key_preview,
         rpm_limit: req.rpm_limit,
@@ -680,16 +682,21 @@ pub async fn update_account(
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to update account: {}", e)))?;
 
+    // 返回更新后的账号信息
     Ok(Json(serde_json::json!({
-        "success": true,
-        "message": "Account updated",
-        "account_id": updated.id,
-        "updated_fields": {
-            "name": req.name,
-            "models": req.models,
-            "is_active": req.is_active,
-        },
-        "updated_by": auth.user_id,
+        "id": updated.id.to_string(),
+        "name": updated.name,
+        "provider": updated.provider,
+        "api_key_preview": updated.upstream_api_key_preview,
+        "api_base": updated.endpoint,
+        "models": updated.models_supported,
+        "rpm_limit": updated.rpm_limit,
+        "current_rpm": 0,
+        "is_active": updated.enabled,
+        "is_healthy": true,
+        "priority": updated.priority,
+        "created_at": updated.created_at.to_rfc3339(),
+        "last_used_at": serde_json::Value::Null,
     })))
 }
 
@@ -783,30 +790,40 @@ pub async fn test_account(
     let latency_ms = start.elapsed().as_millis() as i64;
 
     match test_result {
-        Ok(models) => Ok(Json(serde_json::json!({
-            "success": true,
-            "message": "Account connection test passed",
-            "account_id": account_id,
-            "test_result": {
-                "is_healthy": true,
-                "latency_ms": latency_ms,
-                "available_models": models,
-                "provider": account.provider,
-                "endpoint": endpoint,
-            }
-        }))),
-        Err(e) => Ok(Json(serde_json::json!({
-            "success": false,
-            "message": "Account connection test failed",
-            "account_id": account_id,
-            "test_result": {
-                "is_healthy": false,
-                "latency_ms": latency_ms,
-                "error": e,
-                "provider": account.provider,
-                "endpoint": endpoint,
-            }
-        }))),
+        Ok(models) => {
+            // 测试成功：清除错误计数
+            state.account_states.clear_cooldown(account_id);
+
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "message": "Account connection test passed",
+                "account_id": account_id,
+                "test_result": {
+                    "is_healthy": true,
+                    "latency_ms": latency_ms,
+                    "available_models": models,
+                    "provider": account.provider,
+                    "endpoint": endpoint,
+                }
+            })))
+        }
+        Err(e) => {
+            // 测试失败：标记错误（仅管理员测试时触发）
+            state.account_states.mark_error(account_id);
+
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "message": "Account connection test failed",
+                "account_id": account_id,
+                "test_result": {
+                    "is_healthy": false,
+                    "latency_ms": latency_ms,
+                    "error": e,
+                    "provider": account.provider,
+                    "endpoint": endpoint,
+                }
+            })))
+        }
     }
 }
 

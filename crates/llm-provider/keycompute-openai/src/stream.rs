@@ -20,13 +20,34 @@ pub fn parse_openai_stream(
 ) -> Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>> {
     let (tx, rx) = mpsc::channel::<Result<StreamEvent>>(100);
 
+    // 在 spawn 外记录日志，确保能输出
+    tracing::info!("parse_openai_stream: function called, spawning task");
+
     tokio::spawn(async move {
         let mut buffer = String::new();
         let mut stream = stream;
+        let mut chunk_count = 0u32;
+        let mut total_bytes = 0usize;
+
+        // 使用 eprintln! 确保输出到 stderr
+        eprintln!("[DEBUG] parse_openai_stream: task started, waiting for chunks");
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
+                    chunk_count += 1;
+                    total_bytes += chunk.len();
+
+                    // 前 5 个 chunk 打印详细信息
+                    if chunk_count <= 5 {
+                        eprintln!(
+                            "[DEBUG] parse_openai_stream: chunk #{} len={} total_bytes={}",
+                            chunk_count,
+                            chunk.len(),
+                            total_bytes
+                        );
+                    }
+
                     let text = String::from_utf8_lossy(&chunk);
                     buffer.push_str(&text);
 
@@ -38,8 +59,20 @@ pub fn parse_openai_stream(
                         // 处理可能的 \r\n
                         let line = line.trim_end_matches('\r');
 
+                        if !line.is_empty() && chunk_count <= 5 {
+                            eprintln!(
+                                "[DEBUG] parse_openai_stream: line len={} preview={:?}",
+                                line.len(),
+                                &line.chars().take(100).collect::<String>()
+                            );
+                        }
+
                         if let Some(data) = sse::parse_sse_line(line) {
                             if sse::is_done_marker(&data) {
+                                eprintln!(
+                                    "[DEBUG] parse_openai_stream: [DONE] marker received, chunks={}, bytes={}",
+                                    chunk_count, total_bytes
+                                );
                                 let _ = tx.send(Ok(StreamEvent::done())).await;
                                 return;
                             }
@@ -48,11 +81,15 @@ pub fn parse_openai_stream(
                             match parse_openai_event(&data) {
                                 Ok(Some(event)) => {
                                     if tx.send(Ok(event)).await.is_err() {
+                                        eprintln!(
+                                            "[DEBUG] parse_openai_stream: receiver dropped, exiting"
+                                        );
                                         return;
                                     }
                                 }
                                 Ok(None) => continue,
                                 Err(e) => {
+                                    eprintln!("[DEBUG] parse_openai_stream: parse error: {:?}", e);
                                     let _ = tx.send(Err(e)).await;
                                     return;
                                 }
@@ -61,6 +98,7 @@ pub fn parse_openai_stream(
                     }
                 }
                 Err(e) => {
+                    eprintln!("[DEBUG] parse_openai_stream: chunk error: {}", e);
                     let _ = tx
                         .send(Err(KeyComputeError::ProviderError(e.to_string())))
                         .await;
@@ -70,6 +108,10 @@ pub fn parse_openai_stream(
         }
 
         // 流结束
+        eprintln!(
+            "[DEBUG] parse_openai_stream: stream ended, chunks={}, bytes={}",
+            chunk_count, total_bytes
+        );
         let _ = tx.send(Ok(StreamEvent::done())).await;
     });
 

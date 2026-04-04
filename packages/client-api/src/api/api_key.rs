@@ -23,8 +23,20 @@ impl ApiKeyApi {
     }
 
     /// 获取我的 API Keys 列表
-    pub async fn list_my_api_keys(&self, token: &str) -> Result<Vec<ApiKeyInfo>> {
-        self.client.get_json("/api/v1/keys", Some(token)).await
+    ///
+    /// # 参数
+    /// - `include_revoked`: 是否包含已撤销的 Key（默认 false）
+    pub async fn list_my_api_keys(
+        &self,
+        include_revoked: bool,
+        token: &str,
+    ) -> Result<Vec<ApiKeyInfo>> {
+        let path = if include_revoked {
+            "/api/v1/keys?include_revoked=true"
+        } else {
+            "/api/v1/keys"
+        };
+        self.client.get_json(path, Some(token)).await
     }
 
     /// 创建新的 API Key
@@ -52,11 +64,19 @@ pub struct ApiKeyInfo {
     pub id: String,
     pub name: String,
     pub key_preview: String,
-    pub revoked: bool,
-    pub revoked_at: Option<String>,
-    pub expires_at: Option<String>,
-    pub last_used_at: Option<String>,
+    /// 是否活跃（后端返回 is_active，前端转换为 !revoked）
+    #[serde(rename = "is_active")]
+    pub is_active: bool,
     pub created_at: String,
+    pub last_used_at: Option<String>,
+    pub expires_at: Option<String>,
+}
+
+impl ApiKeyInfo {
+    /// 返回是否已撤销（与 is_active 相反）
+    pub fn revoked(&self) -> bool {
+        !self.is_active
+    }
 }
 
 /// 创建 API Key 请求
@@ -83,10 +103,22 @@ impl CreateApiKeyRequest {
 /// 创建 API Key 响应（包含完整 key，仅创建时返回一次）
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateApiKeyResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 消息
+    pub message: Option<String>,
+    /// API Key ID（后端字段名为 key_id）
+    #[serde(rename = "key_id")]
     pub id: String,
+    /// API Key 名称
     pub name: String,
+    /// 完整的 API Key（后端字段名为 key）
+    #[serde(rename = "key")]
     pub api_key: String,
-    pub key_preview: String,
+    /// 过期时间
     pub expires_at: Option<String>,
+    /// 创建时间
     pub created_at: String,
+    /// 是否永不过期
+    pub never_expires: Option<bool>,
 }

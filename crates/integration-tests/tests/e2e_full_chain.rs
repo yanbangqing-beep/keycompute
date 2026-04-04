@@ -11,7 +11,7 @@ use integration_tests::mocks::provider::MockProviderFactory;
 
 use keycompute_billing::calculate_amount;
 use keycompute_provider_trait::ProviderAdapter;
-use keycompute_runtime::AccountStateStore;
+use keycompute_routing::AccountStateStore;
 use keycompute_types::{Message, PricingSnapshot, RequestContext, UsageAccumulator};
 
 use futures::StreamExt;

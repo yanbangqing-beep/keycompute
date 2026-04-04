@@ -63,7 +63,8 @@ pub struct AccountInfo {
     pub name: String,
     pub provider: String,
     pub api_key_preview: String,
-    pub base_url: Option<String>,
+    /// 自定义 Base URL（Provider 端点地址）
+    pub api_base: Option<String>,
     pub models: Vec<String>,
     pub rpm_limit: i32,
     pub current_rpm: i32,

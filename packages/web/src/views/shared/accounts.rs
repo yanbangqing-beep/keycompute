@@ -3,7 +3,7 @@ use ui::{Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Pagination, Tab
 
 const PAGE_SIZE: usize = 20;
 
-use crate::services::{account_service, api_client::with_auto_refresh};
+use crate::services::{account_service, api_client::with_auto_refresh, debug_service};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::ui_store::UiStore;
 use crate::stores::user_store::UserStore;
@@ -85,6 +85,9 @@ fn AdminAccountsView() -> Element {
     let mut error_msg = use_signal(String::new);
     let mut page = use_signal(|| 1u32);
 
+    // 全局重置健康状态
+    let mut resetting = use_signal(|| false);
+
     // 编辑弹窗状态
     let mut edit_id = use_signal(String::new);
     let mut edit_name = use_signal(String::new);
@@ -107,6 +110,25 @@ fn AdminAccountsView() -> Element {
         })
         .await
     });
+
+    // 全局重置健康状态处理函数
+    let on_reset_health = move |_| {
+        let auth = auth_store.clone();
+        let mut ui = ui_store.clone();
+        resetting.set(true);
+        spawn(async move {
+            let token = auth.token().unwrap_or_default();
+            match debug_service::reset_health(&token).await {
+                Ok(resp) => {
+                    ui.show_success(&resp.message);
+                }
+                Err(e) => {
+                    ui.show_error(format!("重置失败：{}", e));
+                }
+            }
+            resetting.set(false);
+        });
+    };
 
     let on_submit = move |_| {
         let name = create_name();
@@ -205,6 +227,15 @@ fn AdminAccountsView() -> Element {
         }
 
         div { class: "toolbar",
+            div { class: "toolbar-left",
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Small,
+                    loading: resetting(),
+                    onclick: on_reset_health,
+                    if resetting() { "重置中..." } else { "重置健康状态" }
+                }
+            }
             div { class: "toolbar-right",
                 Button {
                     variant: ButtonVariant::Primary,

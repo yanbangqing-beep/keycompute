@@ -409,26 +409,34 @@ async fn test_list_all_payment_orders_success() {
 
     Mock::given(method("GET"))
         .and(path("/api/v1/admin/payments/orders"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
-            {
-                "id": "order_001",
-                "out_trade_no": "PAY202401200001",
-                "user_id": "user_001",
-                "amount": 100.0,
-                "currency": "USD",
-                "status": "paid",
-                "created_at": "2024-01-20T10:00:00Z"
-            },
-            {
-                "id": "order_002",
-                "out_trade_no": "PAY202401190001",
-                "user_id": "user_002",
-                "amount": 50.0,
-                "currency": "USD",
-                "status": "pending",
-                "created_at": "2024-01-19T10:00:00Z"
-            }
-        ])))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "orders": [
+                {
+                    "id": "order_001",
+                    "tenant_id": null,
+                    "user_id": "user_001",
+                    "out_trade_no": "PAY202401200001",
+                    "trade_no": null,
+                    "amount": "100.00",
+                    "status": "paid",
+                    "subject": null,
+                    "created_at": "2024-01-20T10:00:00Z"
+                },
+                {
+                    "id": "order_002",
+                    "tenant_id": null,
+                    "user_id": "user_002",
+                    "out_trade_no": "PAY202401190001",
+                    "trade_no": null,
+                    "amount": "50.00",
+                    "status": "pending",
+                    "subject": null,
+                    "created_at": "2024-01-19T10:00:00Z"
+                }
+            ],
+            "page": 1,
+            "page_size": 20
+        })))
         .mount(&mock_server)
         .await;
 

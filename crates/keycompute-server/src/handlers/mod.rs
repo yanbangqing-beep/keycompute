@@ -58,7 +58,7 @@ pub use pricing::{calculate_cost as get_pricing_cost, get_pricing};
 
 // 调试接口
 pub use gateway::{check_provider_health, get_execution_stats, get_gateway_status};
-pub use routing::{debug_routing, get_provider_health};
+pub use routing::{debug_routing, get_provider_health, reset_health, set_account_cooldown};
 
 // 健康检查
 pub use health::health_check;

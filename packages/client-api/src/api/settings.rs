@@ -67,9 +67,37 @@ impl SettingsApi {
     // ==================== 公开接口 ====================
 
     /// 获取公开设置（无需认证）
-    pub async fn get_public_settings(&self) -> Result<HashMap<String, SettingValue>> {
+    pub async fn get_public_settings(&self) -> Result<PublicSettings> {
         self.client.get_json("/api/v1/settings/public", None).await
     }
+
+    /// 获取公开设置（HashMap 格式，向后兼容）
+    pub async fn get_public_settings_map(&self) -> Result<HashMap<String, SettingValue>> {
+        self.client.get_json("/api/v1/settings/public", None).await
+    }
+}
+
+/// 公开系统设置
+#[derive(Debug, Clone, Deserialize)]
+pub struct PublicSettings {
+    pub site_name: String,
+    pub site_description: Option<String>,
+    pub site_logo_url: Option<String>,
+    pub site_favicon_url: Option<String>,
+    /// API 基础 URL（用于生成 API 用法示例）
+    pub api_base_url: Option<String>,
+    pub allow_registration: bool,
+    pub email_verification_required: bool,
+    pub maintenance_mode: bool,
+    pub maintenance_message: Option<String>,
+    pub alipay_enabled: bool,
+    pub wechatpay_enabled: bool,
+    pub system_notice: Option<String>,
+    pub system_notice_enabled: bool,
+    pub footer_content: Option<String>,
+    pub about_content: Option<String>,
+    pub terms_of_service_url: Option<String>,
+    pub privacy_policy_url: Option<String>,
 }
 
 /// 设置值

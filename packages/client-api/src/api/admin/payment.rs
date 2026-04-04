@@ -60,10 +60,13 @@ impl PaymentQueryParams {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PaymentOrderInfo {
     pub id: String,
+    pub tenant_id: Option<String>,
     pub user_id: String,
     pub out_trade_no: String,
-    pub amount: f64,
-    pub currency: String,
+    pub trade_no: Option<String>,
+    /// 金额（字符串格式，如 "100.00"）
+    pub amount: String,
     pub status: String,
+    pub subject: Option<String>,
     pub created_at: String,
 }

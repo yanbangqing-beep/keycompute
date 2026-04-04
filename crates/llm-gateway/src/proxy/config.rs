@@ -28,12 +28,13 @@ pub struct ProxyConfig {
 impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
-            connect_timeout: Duration::from_secs(10),
+            connect_timeout: Duration::from_secs(30),
             request_timeout: Duration::from_secs(120),
             stream_timeout: Duration::from_secs(600), // 10 分钟，流式请求可能很长
-            pool_max_idle_per_host: 10,
-            pool_idle_timeout: Duration::from_secs(90),
-            tcp_keepalive: Some(Duration::from_secs(60)),
+            // 使用小连接池，短超时，避免复用已关闭的连接
+            pool_max_idle_per_host: 2,
+            pool_idle_timeout: Duration::from_secs(10),
+            tcp_keepalive: Some(Duration::from_secs(15)),
             enable_tracing: true,
             user_agent: format!("KeyCompute-Gateway/{}", env!("CARGO_PKG_VERSION")),
         }

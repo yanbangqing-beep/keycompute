@@ -62,6 +62,8 @@ pub mod setting_keys {
     pub const SITE_DESCRIPTION: &str = "site_description";
     pub const SITE_LOGO_URL: &str = "site_logo_url";
     pub const SITE_FAVICON_URL: &str = "site_favicon_url";
+    /// API 基础 URL（用于生成 API 用法示例）
+    pub const API_BASE_URL: &str = "api_base_url";
 
     // 注册设置
     pub const ALLOW_REGISTRATION: &str = "allow_registration";
@@ -147,6 +149,8 @@ pub struct PublicSettings {
     pub site_description: Option<String>,
     pub site_logo_url: Option<String>,
     pub site_favicon_url: Option<String>,
+    /// API 基础 URL（用于生成 API 用法示例）
+    pub api_base_url: Option<String>,
     pub allow_registration: bool,
     pub email_verification_required: bool,
     pub maintenance_mode: bool,
@@ -168,6 +172,7 @@ impl Default for PublicSettings {
             site_description: Some("AI Gateway Platform".to_string()),
             site_logo_url: None,
             site_favicon_url: None,
+            api_base_url: None,
             allow_registration: true,
             email_verification_required: true,
             maintenance_mode: false,
@@ -410,6 +415,7 @@ impl SystemSetting {
             site_description: get_value(setting_keys::SITE_DESCRIPTION),
             site_logo_url: get_value(setting_keys::SITE_LOGO_URL),
             site_favicon_url: get_value(setting_keys::SITE_FAVICON_URL),
+            api_base_url: get_value(setting_keys::API_BASE_URL),
             allow_registration: get_bool_value(setting_keys::ALLOW_REGISTRATION, true),
             email_verification_required: get_bool_value(
                 setting_keys::EMAIL_VERIFICATION_REQUIRED,

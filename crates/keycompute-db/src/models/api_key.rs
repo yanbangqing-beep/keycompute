@@ -131,6 +131,21 @@ impl ProduceAiKey {
         Ok(keys)
     }
 
+    /// 查找用户的活跃 Produce AI Key（未撤销的）
+    pub async fn find_active_by_user(
+        pool: &sqlx::PgPool,
+        user_id: Uuid,
+    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+        let keys = sqlx::query_as::<_, ProduceAiKey>(
+            "SELECT * FROM produce_ai_keys WHERE user_id = $1 AND revoked = FALSE ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(keys)
+    }
+
     /// 查找租户的所有 Produce AI Key
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,

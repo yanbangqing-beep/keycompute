@@ -10,7 +10,7 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use chrono::{Duration, Utc};
 use keycompute_auth::{PasswordHasher, PasswordValidator, ProduceAiKeyValidator};
@@ -195,23 +195,41 @@ pub struct ApiKeyInfo {
     pub expires_at: Option<String>,
 }
 
+/// API Key 列表查询参数
+#[derive(Debug, Deserialize)]
+pub struct ApiKeyQueryParams {
+    /// 是否包含已撤销的 Key（默认 false）
+    #[serde(default)]
+    pub include_revoked: bool,
+}
+
 /// 列出我的 API Keys
 ///
 /// GET /api/v1/keys
 /// - 普通用户：只返回自己的 Keys
 /// - Admin：可以返回所有 Keys（通过查询参数控制）
+/// - include_revoked: 是否包含已撤销的 Key（默认 false，只返回活跃的）
 pub async fn list_my_api_keys(
     auth: AuthExtractor,
     State(state): State<AppState>,
+    Query(params): Query<ApiKeyQueryParams>,
 ) -> Result<Json<Vec<ApiKeyInfo>>> {
     let pool = state
         .pool
         .as_ref()
         .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
-    let keys = ProduceAiKey::find_by_user(pool, auth.user_id)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to fetch API keys: {}", e)))?;
+    let keys = if params.include_revoked {
+        // 包含已撤销的 Key
+        ProduceAiKey::find_by_user(pool, auth.user_id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to fetch API keys: {}", e)))?
+    } else {
+        // 默认只返回活跃的 Key
+        ProduceAiKey::find_active_by_user(pool, auth.user_id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to fetch API keys: {}", e)))?
+    };
 
     let api_keys: Vec<ApiKeyInfo> = keys
         .into_iter()
@@ -220,9 +238,13 @@ pub async fn list_my_api_keys(
             name: k.name,
             key_preview: k.produce_ai_key_preview,
             created_at: k.created_at.to_rfc3339(),
-            last_used_at: k.last_used_at.map(|t| t.to_rfc3339()),
+            last_used_at: k
+                .last_used_at
+                .map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339()),
             is_active: !k.revoked,
-            expires_at: k.expires_at.map(|t| t.to_rfc3339()),
+            expires_at: k
+                .expires_at
+                .map(|t: chrono::DateTime<chrono::Utc>| t.to_rfc3339()),
         })
         .collect();
 
