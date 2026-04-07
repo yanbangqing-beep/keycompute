@@ -8,13 +8,13 @@ import requests
 
 # 配置
 
-API_URL = "http://192.168.100.100:3000/v1/chat/completions"
-API_KEY = "sk-329939d678d24433bc0277311c576481bc23b86ebc724354"
-
 # API_URL = "https://api.deepseek.com/v1/chat/completions"
 # API_KEY = "sk-70f08cda30ee4e56bd0d27223dec522f"
+# API_MODEL = "deepseek-chat"
 
-API_MODEL = "deepseek-chat"
+API_URL = "http://192.168.100.100:3000/v1/chat/completions"
+API_KEY = "sk-329939d678d24433bc0277311c576481bc23b86ebc724354"
+API_MODEL = "glm-5:cloud"
 
 
 def chat():

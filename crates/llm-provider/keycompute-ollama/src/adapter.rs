@@ -22,7 +22,7 @@ use crate::protocol::{OllamaMessage, OllamaOptions, OllamaRequest, OllamaRespons
 use crate::stream::parse_ollama_stream;
 
 /// Ollama 默认 API 端点
-pub const OLLAMA_DEFAULT_ENDPOINT: &str = "http://ollama.com/api/chat";
+pub const OLLAMA_DEFAULT_ENDPOINT: &str = "https://ollama.com/api/chat";
 
 /// Ollama 支持的模型列表（基于官方 Ollama Cloud 模型）
 pub const OLLAMA_MODELS: &[&str] = &[
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_default_endpoint() {
-        assert_eq!(OLLAMA_DEFAULT_ENDPOINT, "http://localhost:11434/api/chat");
+        assert_eq!(OLLAMA_DEFAULT_ENDPOINT, "https://ollama.com/api/chat");
     }
 
     #[test]

@@ -69,6 +69,8 @@ impl RoutingEngine {
                 "deepseek".to_string(),
                 "vllm".to_string(),
                 "claude".to_string(),
+                "ollama".to_string(),
+                "gemini".to_string(),
             ],
         }
     }
@@ -88,6 +90,8 @@ impl RoutingEngine {
                 "deepseek".to_string(),
                 "vllm".to_string(),
                 "claude".to_string(),
+                "ollama".to_string(),
+                "gemini".to_string(),
             ],
         }
     }

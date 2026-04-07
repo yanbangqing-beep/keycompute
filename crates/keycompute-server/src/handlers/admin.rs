@@ -596,14 +596,25 @@ pub async fn create_account(
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to create account: {}", e)))?;
 
+    // 返回完整的账号信息，与前端 AccountInfo 类型匹配
     Ok(Json(serde_json::json!({
-        "id": account.id,
+        "id": account.id.to_string(),
         "name": account.name,
         "provider": account.provider,
-        "status": if account.enabled { "active" } else { "inactive" },
+        "api_key_preview": account.upstream_api_key_preview,
+        "api_base": if account.endpoint.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::Value::String(account.endpoint)
+        },
+        "models": account.models_supported,
+        "rpm_limit": account.rpm_limit,
+        "current_rpm": 0,
         "is_active": account.enabled,
+        "is_healthy": true,
+        "priority": account.priority,
         "created_at": account.created_at.to_rfc3339(),
-        "updated_at": account.updated_at.to_rfc3339(),
+        "last_used_at": serde_json::Value::Null,
     })))
 }
 
