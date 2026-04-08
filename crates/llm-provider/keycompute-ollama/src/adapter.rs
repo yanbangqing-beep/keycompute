@@ -274,7 +274,7 @@ impl OllamaProvider {
             KeyComputeError::ProviderError(format!("Failed to serialize request: {}", e))
         })?;
 
-        let headers = self.build_headers(&request.upstream_api_key);
+        let headers = self.build_headers(request.upstream_api_key.expose());
         let response_text = transport.post_json(&endpoint, headers, body_json).await?;
         let ollama_response: OllamaResponse =
             serde_json::from_str(&response_text).map_err(|e| {
@@ -295,7 +295,7 @@ impl OllamaProvider {
             KeyComputeError::ProviderError(format!("Failed to serialize request: {}", e))
         })?;
 
-        let headers = self.build_headers(&request.upstream_api_key);
+        let headers = self.build_headers(request.upstream_api_key.expose());
         let byte_stream: ByteStream = transport.post_stream(&endpoint, headers, body_json).await?;
         Ok(parse_ollama_stream(byte_stream))
     }

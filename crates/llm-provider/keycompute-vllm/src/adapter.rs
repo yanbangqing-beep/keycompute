@@ -141,7 +141,7 @@ impl VllmProvider {
             // vLLM 本地部署通常不需要 API Key，但支持可选的 Authorization
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.upstream_api_key),
+                format!("Bearer {}", request.upstream_api_key.expose()),
             ),
         ];
 
@@ -178,7 +178,7 @@ impl VllmProvider {
             ("Accept".to_string(), "text/event-stream".to_string()),
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.upstream_api_key),
+                format!("Bearer {}", request.upstream_api_key.expose()),
             ),
         ];
 

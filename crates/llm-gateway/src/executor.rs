@@ -206,7 +206,7 @@ impl GatewayExecutor {
                 } => {
                     // 累积 tokens（简化估算）
                     let tokens = Self::estimate_tokens(&content);
-                    ctx.usage.add_output(tokens);
+                    ctx.add_output_tokens(tokens);
 
                     // 转发给客户端
                     let event = StreamEvent::Delta {
@@ -234,11 +234,11 @@ impl GatewayExecutor {
                     output_tokens,
                 } => {
                     // Provider 报告的用量（优先级更高）
-                    ctx.usage.set_input(input_tokens);
+                    ctx.set_input_tokens(input_tokens);
                     // 覆盖输出的 token 计数
-                    let current_output = ctx.usage.snapshot().1;
+                    let current_output = ctx.usage_snapshot().1;
                     if output_tokens > current_output {
-                        ctx.usage.add_output(output_tokens - current_output);
+                        ctx.add_output_tokens(output_tokens - current_output);
                     }
                 }
                 StreamEvent::Done => {
@@ -282,7 +282,7 @@ impl GatewayExecutor {
             .messages
             .iter()
             .map(|m| keycompute_provider_trait::UpstreamMessage {
-                role: m.role.clone(),
+                role: m.role.to_string(),
                 content: m.content.clone(),
             })
             .collect();
@@ -333,31 +333,25 @@ impl GatewayExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use keycompute_types::{Message, PricingSnapshot, UsageAccumulator};
+    use keycompute_types::{Message, PricingSnapshot};
     use rust_decimal::Decimal;
 
     #[allow(dead_code)]
     fn create_test_context() -> RequestContext {
-        RequestContext {
-            request_id: uuid::Uuid::new_v4(),
-            user_id: uuid::Uuid::new_v4(),
-            tenant_id: uuid::Uuid::new_v4(),
-            produce_ai_key_id: uuid::Uuid::new_v4(),
-            model: "gpt-4o".to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: "Hello".to_string(),
-            }],
-            stream: true,
-            pricing_snapshot: PricingSnapshot {
+        RequestContext::new(
+            uuid::Uuid::new_v4(),
+            uuid::Uuid::new_v4(),
+            uuid::Uuid::new_v4(),
+            "gpt-4o",
+            vec![Message::user("Hello")],
+            true,
+            PricingSnapshot {
                 model_name: "gpt-4o".to_string(),
                 currency: "CNY".to_string(),
                 input_price_per_1k: Decimal::from(1),
                 output_price_per_1k: Decimal::from(2),
             },
-            usage: UsageAccumulator::default(),
-            started_at: chrono::Utc::now(),
-        }
+        )
     }
 
     #[test]

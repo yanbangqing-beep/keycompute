@@ -299,7 +299,6 @@ async fn test_billing_triggers_distribution() {
     let mut chain = VerificationChain::new();
 
     // 1. 创建 RequestContext
-    let request_id = uuid::Uuid::new_v4();
     let tenant_id = uuid::Uuid::new_v4();
     let user_id = uuid::Uuid::new_v4();
     let produce_ai_key_id = uuid::Uuid::new_v4();
@@ -311,25 +310,19 @@ async fn test_billing_triggers_distribution() {
         output_price_per_1k: Decimal::from(2),
     };
 
-    let request_context = keycompute_types::RequestContext {
-        request_id,
+    let request_context = keycompute_types::RequestContext::new(
         user_id,
         tenant_id,
         produce_ai_key_id,
-        model: "gpt-4o".to_string(),
-        messages: vec![keycompute_types::Message {
-            role: "user".to_string(),
-            content: "Hello".to_string(),
-        }],
-        stream: true,
-        pricing_snapshot: pricing,
-        usage: keycompute_types::UsageAccumulator::default(),
-        started_at: chrono::Utc::now(),
-    };
+        "gpt-4o",
+        vec![keycompute_types::Message::user("Hello")],
+        true,
+        pricing,
+    );
 
     // 模拟 token 使用
-    request_context.usage.set_input(1000);
-    request_context.usage.add_output(500);
+    request_context.set_input_tokens(1000);
+    request_context.add_output_tokens(500);
 
     chain.add_step(
         "keycompute-types",

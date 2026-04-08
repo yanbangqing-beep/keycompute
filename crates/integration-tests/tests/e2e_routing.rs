@@ -24,23 +24,20 @@ fn create_test_engine() -> RoutingEngine {
 
 /// 创建测试用的请求上下文
 fn create_test_context() -> RequestContext {
-    RequestContext {
-        request_id: Uuid::new_v4(),
-        user_id: Uuid::new_v4(),
-        tenant_id: Uuid::new_v4(),
-        produce_ai_key_id: Uuid::new_v4(),
-        model: "gpt-4o".to_string(),
-        messages: vec![],
-        stream: true,
-        pricing_snapshot: PricingSnapshot {
+    RequestContext::new(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        "gpt-4o",
+        vec![],
+        true,
+        PricingSnapshot {
             model_name: "gpt-4o".to_string(),
             currency: "CNY".to_string(),
             input_price_per_1k: Decimal::from(1),
             output_price_per_1k: Decimal::from(2),
         },
-        usage: Default::default(),
-        started_at: chrono::Utc::now(),
-    }
+    )
 }
 
 /// 测试双层路由流程

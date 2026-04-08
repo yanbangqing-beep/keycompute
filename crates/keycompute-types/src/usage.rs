@@ -37,18 +37,17 @@ impl UsageAccumulator {
     }
 }
 
-impl Clone for UsageAccumulator {
-    fn clone(&self) -> Self {
-        let (input, output) = self.snapshot();
-        let new = Self::default();
-        new.set_input(input);
-        // 使用 fetch_add 来设置 output_tokens
-        let current = new.output_tokens.load(Ordering::Relaxed);
-        if output > current {
-            new.output_tokens
-                .fetch_add(output - current, Ordering::Relaxed);
-        }
-        new
+/// 从 snapshot 创建新的 UsageAccumulator
+///
+/// 注意：这会创建独立的 Accumulator，不会共享状态。
+/// 如需共享状态，请使用 Arc<UsageAccumulator>。
+impl From<(u32, u32)> for UsageAccumulator {
+    fn from((input, output): (u32, u32)) -> Self {
+        let acc = Self::new();
+        acc.set_input(input);
+        // 直接设置输出 token，避免循环
+        acc.output_tokens.store(output, Ordering::Relaxed);
+        acc
     }
 }
 

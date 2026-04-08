@@ -128,7 +128,7 @@ impl DeepSeekProvider {
         let headers = vec![
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.upstream_api_key),
+                format!("Bearer {}", request.upstream_api_key.expose()),
             ),
             ("Content-Type".to_string(), "application/json".to_string()),
         ];
@@ -170,7 +170,7 @@ impl DeepSeekProvider {
         let headers = vec![
             (
                 "Authorization".to_string(),
-                format!("Bearer {}", request.upstream_api_key),
+                format!("Bearer {}", request.upstream_api_key.expose()),
             ),
             ("Content-Type".to_string(), "application/json".to_string()),
             ("Accept".to_string(), "text/event-stream".to_string()),

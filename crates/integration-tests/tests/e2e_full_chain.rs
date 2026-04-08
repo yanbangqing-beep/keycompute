@@ -33,21 +33,15 @@ async fn test_full_request_chain() {
         output_price_per_1k: Decimal::from(2),
     };
 
-    let request_context = Arc::new(RequestContext {
-        request_id: ctx.request_id,
-        user_id: ctx.user_id,
-        tenant_id: ctx.tenant_id,
-        produce_ai_key_id: ctx.produce_ai_key_id,
-        model: "gpt-4o".to_string(),
-        messages: vec![Message {
-            role: "user".to_string(),
-            content: "Hello, world!".to_string(),
-        }],
-        stream: true,
-        pricing_snapshot: pricing.clone(),
-        usage: UsageAccumulator::default(),
-        started_at: chrono::Utc::now(),
-    });
+    let request_context = Arc::new(RequestContext::new(
+        ctx.user_id,
+        ctx.tenant_id,
+        ctx.produce_ai_key_id,
+        "gpt-4o",
+        vec![Message::user("Hello, world!")],
+        true,
+        pricing.clone(),
+    ));
 
     chain.add_step(
         "keycompute-types",
@@ -96,13 +90,13 @@ async fn test_full_request_chain() {
             keycompute_provider_trait::StreamEvent::Delta { content, .. } => {
                 delta_count += 1;
                 // 模拟 Token 累积
-                request_context.usage.add_output(estimate_tokens(&content));
+                request_context.add_output_tokens(estimate_tokens(&content));
             }
             keycompute_provider_trait::StreamEvent::Usage {
                 input_tokens,
                 output_tokens,
             } => {
-                request_context.usage.set_input(input_tokens);
+                request_context.set_input_tokens(input_tokens);
                 usage_event = Some((input_tokens, output_tokens));
             }
             keycompute_provider_trait::StreamEvent::Done => break,
@@ -118,7 +112,7 @@ async fn test_full_request_chain() {
     );
 
     // 5. 验证 Token 累积
-    let (input_tokens, output_tokens) = request_context.usage.snapshot();
+    let (input_tokens, output_tokens) = request_context.usage_snapshot();
     chain.add_step(
         "keycompute-types",
         "UsageAccumulator::snapshot",

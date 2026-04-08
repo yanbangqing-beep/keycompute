@@ -132,7 +132,10 @@ impl GeminiProvider {
         // Gemini 需要 API key 作为 query parameter
         format!(
             "{}/models/{}:{}?key={}",
-            base, model, method, request.upstream_api_key
+            base,
+            model,
+            method,
+            request.upstream_api_key.expose()
         )
     }
 
@@ -315,7 +318,7 @@ mod tests {
         let provider = GeminiProvider::new();
         let request = UpstreamRequest {
             endpoint: "https://generativelanguage.googleapis.com/v1beta".to_string(),
-            upstream_api_key: "test-key".to_string(),
+            upstream_api_key: "test-key".into(),
             model: "gemini-1.5-flash".to_string(),
             messages: vec![
                 UpstreamMessage {

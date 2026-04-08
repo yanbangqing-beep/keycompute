@@ -18,7 +18,7 @@ use axum::{
 };
 use futures::stream::Stream;
 use keycompute_db::models::account::Account;
-use keycompute_types::{Message, RequestContext, UsageAccumulator};
+use keycompute_types::{Message, MessageRole, RequestContext};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -310,25 +310,31 @@ pub async fn chat_completions(
     let messages: Vec<Message> = request
         .messages
         .iter()
-        .map(|m| Message {
-            role: m.role.clone(),
-            content: m.content.clone().unwrap_or_default(),
+        .map(|m| {
+            let role = match m.role.as_str() {
+                "system" => MessageRole::System,
+                "user" => MessageRole::User,
+                "assistant" => MessageRole::Assistant,
+                "tool" => MessageRole::Tool,
+                _ => MessageRole::User, // 默认角色
+            };
+            Message {
+                role,
+                content: m.content.clone().unwrap_or_default(),
+            }
         })
         .collect();
 
     // 4. 构建 RequestContext
-    let ctx = Arc::new(RequestContext {
-        request_id: request_id.0,
-        user_id: auth.user_id,
-        tenant_id: auth.tenant_id,
-        produce_ai_key_id: auth.produce_ai_key_id,
-        model: request.model.clone(),
+    let ctx = Arc::new(RequestContext::new(
+        auth.user_id,
+        auth.tenant_id,
+        auth.produce_ai_key_id,
+        request.model.clone(),
         messages,
-        stream: request.stream,
-        pricing_snapshot: pricing,
-        usage: UsageAccumulator::default(),
-        started_at: chrono::Utc::now(),
-    });
+        request.stream,
+        pricing,
+    ));
 
     // 5. 智能路由
     let plan = state
@@ -478,7 +484,7 @@ async fn create_openai_response(
         .await;
 
     // 获取用量信息
-    let (prompt_tokens, completion_tokens) = ctx.usage.snapshot();
+    let (prompt_tokens, completion_tokens) = ctx.usage_snapshot();
 
     Ok(ChatCompletionResponse {
         id: completion_id,
@@ -571,7 +577,7 @@ fn create_openai_stream(
 
                         // 如果需要包含用量信息
                         if stream_options.as_ref().map(|o| o.include_usage).unwrap_or(false) {
-                            let (input_tokens, output_tokens) = ctx.usage.snapshot();
+                            let (input_tokens, output_tokens) = ctx.usage_snapshot();
                             let usage_chunk = ChatCompletionChunk {
                                 id: completion_id.clone(),
                                 object: "chat.completion.chunk".to_string(),
@@ -605,7 +611,7 @@ fn create_openai_stream(
 
                     // 如果需要包含用量信息
                     if stream_options.as_ref().map(|o| o.include_usage).unwrap_or(false) {
-                        let (input_tokens, output_tokens) = ctx.usage.snapshot();
+                        let (input_tokens, output_tokens) = ctx.usage_snapshot();
                         let usage_chunk = ChatCompletionChunk {
                             id: completion_id.clone(),
                             object: "chat.completion.chunk".to_string(),

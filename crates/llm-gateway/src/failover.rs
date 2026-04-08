@@ -106,13 +106,13 @@ mod tests {
                 provider: "openai".to_string(),
                 account_id: Uuid::new_v4(),
                 endpoint: "https://api.openai.com".to_string(),
-                upstream_api_key: "key1".to_string(),
+                upstream_api_key: "key1".into(),
             },
             ExecutionTarget {
                 provider: "claude".to_string(),
                 account_id: Uuid::new_v4(),
                 endpoint: "https://api.anthropic.com".to_string(),
-                upstream_api_key: "key2".to_string(),
+                upstream_api_key: "key2".into(),
             },
         ]
     }

@@ -28,14 +28,14 @@ impl RequestNormalizer {
             .messages
             .iter()
             .map(|m| keycompute_provider_trait::UpstreamMessage {
-                role: m.role.clone(),
+                role: m.role.to_string(),
                 content: m.content.clone(),
             })
             .collect();
 
         UpstreamRequest {
             endpoint: endpoint.to_string(),
-            upstream_api_key: api_key.to_string(),
+            upstream_api_key: api_key.to_string().into(),
             model: ctx.model.clone(),
             messages,
             stream: ctx.stream,
@@ -67,31 +67,25 @@ impl RequestNormalizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use keycompute_types::{Message, PricingSnapshot, UsageAccumulator};
+    use keycompute_types::{Message, PricingSnapshot};
     use rust_decimal::Decimal;
     use uuid::Uuid;
 
     fn create_test_context() -> RequestContext {
-        RequestContext {
-            request_id: Uuid::new_v4(),
-            user_id: Uuid::new_v4(),
-            tenant_id: Uuid::new_v4(),
-            produce_ai_key_id: Uuid::new_v4(),
-            model: "gpt-4o".to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: "Hello".to_string(),
-            }],
-            stream: true,
-            pricing_snapshot: PricingSnapshot {
+        RequestContext::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "gpt-4o",
+            vec![Message::user("Hello")],
+            true,
+            PricingSnapshot {
                 model_name: "gpt-4o".to_string(),
                 currency: "CNY".to_string(),
                 input_price_per_1k: Decimal::from(1),
                 output_price_per_1k: Decimal::from(2),
             },
-            usage: UsageAccumulator::default(),
-            started_at: chrono::Utc::now(),
-        }
+        )
     }
 
     #[test]

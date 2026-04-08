@@ -29,23 +29,20 @@ use uuid::Uuid;
 
 /// 创建测试用的请求上下文
 fn create_test_context() -> RequestContext {
-    RequestContext {
-        request_id: Uuid::new_v4(),
-        user_id: Uuid::new_v4(),
-        tenant_id: Uuid::new_v4(),
-        produce_ai_key_id: Uuid::new_v4(),
-        model: "gpt-4o".to_string(),
-        messages: vec![],
-        stream: true,
-        pricing_snapshot: PricingSnapshot {
+    RequestContext::new(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        "gpt-4o",
+        vec![],
+        true,
+        PricingSnapshot {
             model_name: "gpt-4o".to_string(),
             currency: "CNY".to_string(),
             input_price_per_1k: Decimal::from(1),
             output_price_per_1k: Decimal::from(2),
         },
-        usage: Default::default(),
-        started_at: chrono::Utc::now(),
-    }
+    )
 }
 
 /// 创建测试用的路由引擎
@@ -779,7 +776,7 @@ async fn test_full_chain_concurrent_pressure() {
                     // Step 3: Provider request
                     let request = UpstreamRequest::new(
                         &plan.primary.endpoint,
-                        &plan.primary.upstream_api_key,
+                        plan.primary.upstream_api_key.clone(),
                         &ctx.model,
                     );
 

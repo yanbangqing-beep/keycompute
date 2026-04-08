@@ -76,7 +76,7 @@ impl BillingService {
         status: &str,
     ) -> Result<NewUsageLog> {
         // 获取用量快照
-        let (input_tokens, output_tokens) = ctx.usage.snapshot();
+        let (input_tokens, output_tokens) = ctx.usage_snapshot();
         let total_tokens = input_tokens + output_tokens;
 
         // 计算用户应付金额

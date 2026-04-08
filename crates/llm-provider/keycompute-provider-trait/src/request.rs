@@ -7,6 +7,7 @@
 //! - 这些值通常从数据库中的 Account 表获取，而非配置文件
 //! - 管理员可通过前端界面动态配置 Provider 端点和 Upstream API Key，无需重启系统
 
+use keycompute_types::SensitiveString;
 use serde::{Deserialize, Serialize};
 
 /// 上游请求结构
@@ -22,7 +23,7 @@ pub struct UpstreamRequest {
     /// 上游 API 端点（由调用方传入，如从 Account 表获取）
     pub endpoint: String,
     /// 上游 Provider API Key（由调用方传入，如从 Account 表获取）
-    pub upstream_api_key: String,
+    pub upstream_api_key: SensitiveString,
     /// 模型名称
     pub model: String,
     /// 消息列表
@@ -41,7 +42,7 @@ impl UpstreamRequest {
     /// 创建新的上游请求
     pub fn new(
         endpoint: impl Into<String>,
-        upstream_api_key: impl Into<String>,
+        upstream_api_key: impl Into<SensitiveString>,
         model: impl Into<String>,
     ) -> Self {
         Self {

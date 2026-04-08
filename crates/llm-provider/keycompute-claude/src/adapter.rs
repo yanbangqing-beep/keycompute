@@ -150,7 +150,7 @@ impl ClaudeProvider {
             KeyComputeError::ProviderError(format!("Failed to serialize request: {}", e))
         })?;
 
-        let headers = self.build_headers(&request.upstream_api_key);
+        let headers = self.build_headers(request.upstream_api_key.expose());
 
         let response_text = transport.post_json(&endpoint, headers, body_json).await?;
 
@@ -180,7 +180,7 @@ impl ClaudeProvider {
             KeyComputeError::ProviderError(format!("Failed to serialize request: {}", e))
         })?;
 
-        let mut headers = self.build_headers(&request.upstream_api_key);
+        let mut headers = self.build_headers(request.upstream_api_key.expose());
         headers.push(("Accept".to_string(), "text/event-stream".to_string()));
 
         let byte_stream: ByteStream = transport.post_stream(&endpoint, headers, body_json).await?;
@@ -352,7 +352,7 @@ mod tests {
         let provider = ClaudeProvider::new();
         let request = UpstreamRequest {
             endpoint: "https://api.anthropic.com/v1/messages".to_string(),
-            upstream_api_key: "sk-test".to_string(),
+            upstream_api_key: "sk-test".into(),
             model: "claude-3-5-sonnet-20241022".to_string(),
             messages: vec![
                 UpstreamMessage {

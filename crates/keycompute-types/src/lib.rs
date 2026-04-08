@@ -12,9 +12,9 @@ pub mod usage;
 
 // 重新导出最常用的类型
 pub use error::{ErrorCategory, KeyComputeError, Result};
-pub use execution_plan::{ExecutionPlan, ExecutionTarget};
+pub use execution_plan::{ExecutionPlan, ExecutionTarget, SensitiveString};
 pub use pricing::PricingSnapshot;
-pub use request::{ChatCompletionRequest, Message, RequestContext};
+pub use request::{ChatCompletionRequest, Message, MessageRole, RequestContext};
 pub use response::{
     ChatCompletionChunk, ChatCompletionResponse, Choice, ErrorResponse, MessageDelta, ModelInfo,
     ModelListResponse, Usage,

@@ -11,7 +11,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use keycompute_types::{RequestContext, UsageAccumulator};
+use keycompute_types::RequestContext;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -97,19 +97,15 @@ pub async fn debug_routing(
         .map_err(|e| ApiError::Internal(format!("Failed to create pricing snapshot: {}", e)))?;
 
     // 2. 构建模拟的 RequestContext
-    let request_id = Uuid::new_v4();
-    let ctx = RequestContext {
-        request_id,
-        user_id: auth.user_id,
-        tenant_id: auth.tenant_id,
-        produce_ai_key_id: auth.produce_ai_key_id,
-        model: query.model.clone(),
-        messages: vec![],
-        stream: true,
-        pricing_snapshot: pricing.clone(),
-        usage: UsageAccumulator::default(),
-        started_at: chrono::Utc::now(),
-    };
+    let ctx = RequestContext::new(
+        auth.user_id,
+        auth.tenant_id,
+        auth.produce_ai_key_id,
+        query.model.clone(),
+        vec![],
+        true,
+        pricing.clone(),
+    );
 
     // 3. 获取所有配置的 provider 列表
     let all_providers: Vec<String> = state.routing.configured_providers().to_vec();
@@ -161,7 +157,7 @@ pub async fn debug_routing(
         Ok(plan) => {
             // 路由成功
             let response = RoutingDebugResponse {
-                request_id,
+                request_id: ctx.request_id,
                 routed: true,
                 primary: Some(RoutingTargetInfo {
                     provider: plan.primary.provider.clone(),
@@ -188,7 +184,7 @@ pub async fn debug_routing(
             };
 
             tracing::info!(
-                request_id = %request_id,
+                request_id = %ctx.request_id,
                 primary_provider = %plan.primary.provider,
                 fallback_count = plan.fallback_chain.len(),
                 "Routing debug completed"
@@ -199,7 +195,7 @@ pub async fn debug_routing(
         Err(keycompute_types::KeyComputeError::RoutingFailed(_)) => {
             // 路由失败，但仍返回诊断信息
             let response = RoutingDebugResponse {
-                request_id,
+                request_id: ctx.request_id,
                 routed: false,
                 primary: None,
                 fallback_chain: vec![],
@@ -217,7 +213,7 @@ pub async fn debug_routing(
             };
 
             tracing::warn!(
-                request_id = %request_id,
+                request_id = %ctx.request_id,
                 model = %query.model,
                 "Routing debug failed: no available targets"
             );
