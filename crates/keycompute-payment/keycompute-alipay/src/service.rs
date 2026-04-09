@@ -122,6 +122,13 @@ impl PaymentService {
     ///
     /// 生成支付二维码，用户使用支付宝扫码完成支付
     /// 返回二维码内容和订单信息
+    ///
+    /// # 执行流程
+    /// 1. 先创建数据库订单记录（状态为 pending）
+    /// 2. 再调用支付宝 precreate API 获取二维码
+    /// 3. 更新数据库订单的 pay_url 字段
+    ///
+    /// 这样可以避免：支付宝 precreate 成功但数据库失败导致的不一致
     pub async fn create_qr_order(
         &self,
         req: CreateOrderRequest,
@@ -132,29 +139,7 @@ impl PaymentService {
         // 格式化金额
         let amount_str = format!("{:.2}", req.amount);
 
-        // 调用支付宝 precreate 接口
-        let precreate_response = self
-            .client
-            .precreate(
-                &out_trade_no,
-                &amount_str,
-                &req.subject,
-                req.body.as_deref(),
-            )
-            .await
-            .map_err(|e| PaymentError::ApiError(e.to_string()))?;
-
-        if !precreate_response.is_success() {
-            return Err(PaymentError::ApiError(
-                precreate_response
-                    .sub_msg
-                    .unwrap_or_else(|| precreate_response.msg.clone()),
-            ));
-        }
-
-        let qr_code = precreate_response.qr_code.clone().unwrap_or_default();
-
-        // 创建数据库订单记录
+        // 先创建数据库订单记录（状态为 pending）
         let db_req = keycompute_db::CreatePaymentOrderRequest {
             tenant_id: req.tenant_id,
             user_id: req.user_id,
@@ -164,10 +149,58 @@ impl PaymentService {
             expire_minutes: self.client.config().timeout_minutes,
         };
 
-        let order =
-            keycompute_db::PaymentOrder::create(&self.pool, &db_req, &out_trade_no, &qr_code)
-                .await
-                .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+        // 临时使用空字符串作为 pay_url，后续更新
+        let order = keycompute_db::PaymentOrder::create(&self.pool, &db_req, &out_trade_no, "")
+            .await
+            .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+
+        // 调用支付宝 precreate 接口
+        let precreate_result = self
+            .client
+            .precreate(
+                &out_trade_no,
+                &amount_str,
+                &req.subject,
+                req.body.as_deref(),
+            )
+            .await;
+
+        let precreate_response = match precreate_result {
+            Ok(r) => r,
+            Err(e) => {
+                // precreate 调用失败，标记订单为失败状态
+                if let Err(mark_err) =
+                    keycompute_db::PaymentOrder::mark_as_failed(&self.pool, order.id).await
+                {
+                    tracing::error!("Failed to mark order {} as failed: {}", order.id, mark_err);
+                }
+                return Err(PaymentError::ApiError(e.to_string()));
+            }
+        };
+
+        if !precreate_response.is_success() {
+            // precreate 返回失败，标记订单为失败状态
+            if let Err(mark_err) =
+                keycompute_db::PaymentOrder::mark_as_failed(&self.pool, order.id).await
+            {
+                tracing::error!("Failed to mark order {} as failed: {}", order.id, mark_err);
+            }
+            return Err(PaymentError::ApiError(
+                precreate_response
+                    .sub_msg
+                    .unwrap_or_else(|| precreate_response.msg.clone()),
+            ));
+        }
+
+        let qr_code = precreate_response.qr_code.clone().unwrap_or_default();
+
+        // 更新数据库订单的 pay_url 字段
+        sqlx::query(r#"UPDATE payment_orders SET pay_url = $1 WHERE id = $2""#)
+            .bind(&qr_code)
+            .bind(order.id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
         Ok(CreateQrOrderResult {
             order_id: order.id,
@@ -236,19 +269,44 @@ impl PaymentService {
             });
         }
 
+        // 验证金额一致性（安全检查）
+        if (total_amount - order.amount).abs() > Decimal::new(1, 2) {
+            // 允许 0.01 元误差
+            tracing::error!(
+                "Amount mismatch: order={}, notify={}",
+                order.amount,
+                total_amount
+            );
+            return Err(PaymentError::AmountMismatch {
+                expected: order.amount,
+                actual: total_amount,
+            });
+        }
+
         // 检查交易状态
-        if trade_status != "TRADE_SUCCESS" && trade_status != "TRADE_FINISHED" {
-            // 交易失败，更新订单状态
-            keycompute_db::PaymentOrder::mark_as_failed(&self.pool, order.id)
+        if trade_status == "TRADE_SUCCESS" || trade_status == "TRADE_FINISHED" {
+            // 交易成功，继续处理
+        } else if trade_status == "TRADE_CLOSED" {
+            // 交易关闭，使用 close 方法设置 closed_at
+            keycompute_db::PaymentOrder::close(&self.pool, order.id)
                 .await
                 .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
             return Ok(NotifyResult {
                 order_id: order.id,
-                status: "failed".to_string(),
+                status: "closed".to_string(),
                 amount: order.amount,
                 trade_no,
             });
+        } else {
+            // 其他状态（如 WAIT_BUYER_PAY），不应该出现在回调中
+            // 记录警告日志，但不修改订单状态，返回错误让支付宝重试
+            tracing::warn!(
+                "Unexpected trade_status '{}' in notify for order {}, ignoring",
+                trade_status,
+                order.id
+            );
+            return Err(PaymentError::InvalidTradeStatus(trade_status));
         }
 
         // 开始事务处理支付成功
@@ -258,7 +316,7 @@ impl PaymentService {
             .await
             .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
-        // 更新订单状态
+        // 更新订单状态（幂等：只有 pending 状态才能更新）
         let notify_data = serde_json::to_value(&params)
             .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
@@ -270,23 +328,41 @@ impl PaymentService {
                 notify_data = $2,
                 paid_at = NOW(),
                 updated_at = NOW()
-            WHERE id = $3
+            WHERE id = $3 AND status = 'pending'
             RETURNING *
-            "#,
+            ""#,
         )
         .bind(&trade_no)
         .bind(sqlx::types::Json(&notify_data))
         .bind(order.id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
-        // 充值用户余额
+        // 如果订单已被其他事务处理，直接返回成功（幂等）
+        let updated_order = match updated_order {
+            Some(o) => o,
+            None => {
+                // 订单已被处理，回滚事务并返回成功
+                tx.rollback()
+                    .await
+                    .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+                return Ok(NotifyResult {
+                    order_id: order.id,
+                    status: "paid".to_string(), // 已被处理
+                    amount: order.amount,
+                    trade_no,
+                });
+            }
+        };
+
+        // 充值用户余额（使用订单中的金额，更安全）
         let description = format!("支付宝充值 - 订单号: {}", out_trade_no);
         keycompute_db::UserBalance::recharge(
             &mut tx,
             order.user_id,
-            total_amount,
+            order.tenant_id,
+            order.amount, // 使用订单金额，而非回调金额
             Some(order.id),
             Some(&description),
         )
@@ -355,6 +431,7 @@ impl PaymentService {
                 .await
                 .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
+            // 更新订单状态（幂等：只有 pending 状态才能更新）
             let updated_order = sqlx::query_as::<_, keycompute_db::PaymentOrder>(
                 r#"
                 UPDATE payment_orders
@@ -363,22 +440,39 @@ impl PaymentService {
                     notify_data = $2,
                     paid_at = NOW(),
                     updated_at = NOW()
-                WHERE id = $3
+                WHERE id = $3 AND status = 'pending'
                 RETURNING *
-                "#,
+                ""#,
             )
             .bind(&trade_no)
             .bind(sqlx::types::Json(&notify_data))
             .bind(order.id)
-            .fetch_one(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+
+            // 如果订单已被其他事务处理，直接返回成功（幂等）
+            let updated_order = match updated_order {
+                Some(o) => o,
+                None => {
+                    // 订单已被处理，回滚事务并返回
+                    tx.rollback()
+                        .await
+                        .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+                    return Ok(SyncResult {
+                        order_id: order.id,
+                        status: "paid".to_string(),
+                        changed: false, // 未发生变化
+                    });
+                }
+            };
 
             // 充值余额
             let description = format!("支付宝充值(同步) - 订单号: {}", out_trade_no);
             keycompute_db::UserBalance::recharge(
                 &mut tx,
                 order.user_id,
+                order.tenant_id,
                 order.amount,
                 Some(order.id),
                 Some(&description),
@@ -396,14 +490,14 @@ impl PaymentService {
                 changed: true,
             })
         } else if trade_status == "TRADE_CLOSED" {
-            // 交易关闭
-            let updated_order = keycompute_db::PaymentOrder::mark_as_failed(&self.pool, order.id)
+            // 交易关闭，使用 close 方法设置 closed_at
+            keycompute_db::PaymentOrder::close(&self.pool, order.id)
                 .await
                 .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
             Ok(SyncResult {
-                order_id: updated_order.id,
-                status: "failed".to_string(),
+                order_id: order.id,
+                status: "closed".to_string(),
                 changed: true,
             })
         } else {
@@ -417,7 +511,22 @@ impl PaymentService {
     }
 
     /// 关闭订单
+    ///
+    /// # 注意
+    /// 此方法会先调用支付宝关闭订单，然后更新本地状态。
+    /// 如果支付宝关闭成功但本地更新失败，本地状态可能不一致。
     pub async fn close_order(&self, out_trade_no: &str) -> Result<(), PaymentError> {
+        // 先查询本地订单
+        let order = keycompute_db::PaymentOrder::find_by_out_trade_no(&self.pool, out_trade_no)
+            .await
+            .map_err(|e| PaymentError::DatabaseError(e.to_string()))?
+            .ok_or(PaymentError::OrderNotFound)?;
+
+        // 检查订单状态，已处理的订单不需要关闭
+        if order.status != "pending" {
+            return Err(PaymentError::InvalidOrderStatus);
+        }
+
         // 调用支付宝关闭订单接口
         let result = self
             .client
@@ -431,17 +540,10 @@ impl PaymentService {
             ));
         }
 
-        // 更新本地订单状态
-        keycompute_db::PaymentOrder::close(
-            &self.pool,
-            keycompute_db::PaymentOrder::find_by_out_trade_no(&self.pool, out_trade_no)
-                .await
-                .map_err(|e| PaymentError::DatabaseError(e.to_string()))?
-                .ok_or(PaymentError::OrderNotFound)?
-                .id,
-        )
-        .await
-        .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
+        // 更新本地订单状态（使用条件更新，避免并发问题）
+        keycompute_db::PaymentOrder::close(&self.pool, order.id)
+            .await
+            .map_err(|e| PaymentError::DatabaseError(e.to_string()))?;
 
         Ok(())
     }
@@ -585,6 +687,10 @@ pub enum PaymentError {
     InvalidAmount,
     #[error("订单状态无效")]
     InvalidOrderStatus,
+    #[error("金额不匹配: 订单 {expected}, 回调 {actual}")]
+    AmountMismatch { expected: Decimal, actual: Decimal },
+    #[error("无效的交易状态: {0}")]
+    InvalidTradeStatus(String),
 }
 
 impl From<crate::config::ConfigError> for PaymentError {

@@ -1,3 +1,4 @@
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -51,10 +52,7 @@ pub struct UpdateTenantRequest {
 
 impl Tenant {
     /// 创建新租户
-    pub async fn create(
-        pool: &sqlx::PgPool,
-        req: &CreateTenantRequest,
-    ) -> Result<Tenant, sqlx::Error> {
+    pub async fn create(pool: &sqlx::PgPool, req: &CreateTenantRequest) -> Result<Tenant, DbError> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
             INSERT INTO tenants (name, slug, description, default_rpm_limit, default_tpm_limit, distribution_enabled)
@@ -75,7 +73,7 @@ impl Tenant {
     }
 
     /// 根据 ID 查找租户
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Tenant>, sqlx::Error> {
+    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Tenant>, DbError> {
         let tenant = sqlx::query_as::<_, Tenant>("SELECT * FROM tenants WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
@@ -85,10 +83,7 @@ impl Tenant {
     }
 
     /// 根据 slug 查找租户
-    pub async fn find_by_slug(
-        pool: &sqlx::PgPool,
-        slug: &str,
-    ) -> Result<Option<Tenant>, sqlx::Error> {
+    pub async fn find_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Option<Tenant>, DbError> {
         let tenant = sqlx::query_as::<_, Tenant>("SELECT * FROM tenants WHERE slug = $1")
             .bind(slug)
             .fetch_optional(pool)
@@ -98,7 +93,7 @@ impl Tenant {
     }
 
     /// 查找所有租户
-    pub async fn find_all(pool: &sqlx::PgPool) -> Result<Vec<Tenant>, sqlx::Error> {
+    pub async fn find_all(pool: &sqlx::PgPool) -> Result<Vec<Tenant>, DbError> {
         let tenants = sqlx::query_as::<_, Tenant>("SELECT * FROM tenants ORDER BY created_at DESC")
             .fetch_all(pool)
             .await?;
@@ -107,7 +102,7 @@ impl Tenant {
     }
 
     /// 查找激活的租户
-    pub async fn find_active(pool: &sqlx::PgPool) -> Result<Vec<Tenant>, sqlx::Error> {
+    pub async fn find_active(pool: &sqlx::PgPool) -> Result<Vec<Tenant>, DbError> {
         let tenants = sqlx::query_as::<_, Tenant>(
             "SELECT * FROM tenants WHERE status = 'active' ORDER BY created_at DESC",
         )
@@ -122,7 +117,7 @@ impl Tenant {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdateTenantRequest,
-    ) -> Result<Tenant, sqlx::Error> {
+    ) -> Result<Tenant, DbError> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
             UPDATE tenants
@@ -151,7 +146,7 @@ impl Tenant {
     }
 
     /// 删除租户
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM tenants WHERE id = $1")
             .bind(self.id)
             .execute(pool)

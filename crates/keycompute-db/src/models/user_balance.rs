@@ -1,5 +1,6 @@
 //! 用户余额模型
 
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -77,22 +78,21 @@ impl UserBalance {
 
 impl UserBalance {
     /// 获取或创建用户余额记录
+    ///
+    /// 使用 ON CONFLICT DO NOTHING 保证原子性，避免竞态条件
+    /// 如果记录已存在，直接返回；否则创建新记录
     pub async fn get_or_create(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
         user_id: Uuid,
-    ) -> Result<UserBalance, sqlx::Error> {
-        // 先尝试获取
-        if let Some(balance) = Self::find_by_user(pool, user_id).await? {
-            return Ok(balance);
-        }
-
-        // 不存在则创建
+    ) -> Result<UserBalance, DbError> {
+        // 使用单个 upsert 查询，避免 TOCTOU 竞态条件
         let balance = sqlx::query_as::<_, UserBalance>(
             r#"
             INSERT INTO user_balances (tenant_id, user_id)
             VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
+            ON CONFLICT (user_id) DO UPDATE SET
+                updated_at = NOW()
             RETURNING *
             "#,
         )
@@ -108,7 +108,7 @@ impl UserBalance {
     pub async fn find_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Option<UserBalance>, sqlx::Error> {
+    ) -> Result<Option<UserBalance>, DbError> {
         let balance =
             sqlx::query_as::<_, UserBalance>("SELECT * FROM user_balances WHERE user_id = $1")
                 .bind(user_id)
@@ -118,13 +118,17 @@ impl UserBalance {
     }
 
     /// 充值（事务内执行）
+    ///
+    /// # 注意
+    /// 如果用户余额记录不存在，会使用传入的 tenant_id 创建新记录
     pub async fn recharge(
         pool: &mut sqlx::PgConnection,
         user_id: Uuid,
+        tenant_id: Uuid,
         amount: Decimal,
         order_id: Option<Uuid>,
         description: Option<&str>,
-    ) -> Result<(UserBalance, BalanceTransaction), sqlx::Error> {
+    ) -> Result<(UserBalance, BalanceTransaction), DbError> {
         // 获取当前余额（加锁）
         let balance = sqlx::query_as::<_, UserBalance>(
             "SELECT * FROM user_balances WHERE user_id = $1 FOR UPDATE",
@@ -139,11 +143,14 @@ impl UserBalance {
             .unwrap_or(Decimal::ZERO);
         let balance_after = balance_before + amount;
 
+        // 使用已有记录的 tenant_id 或传入的 tenant_id
+        let effective_tenant_id = balance.as_ref().map(|b| b.tenant_id).unwrap_or(tenant_id);
+
         // 更新或创建余额
         let updated_balance = sqlx::query_as::<_, UserBalance>(
             r#"
             INSERT INTO user_balances (user_id, tenant_id, available_balance, total_recharged)
-            SELECT $1, $2, $3, $3
+            VALUES ($1, $2, $3, $3)
             ON CONFLICT (user_id) DO UPDATE SET
                 available_balance = user_balances.available_balance + $3,
                 total_recharged = user_balances.total_recharged + $3,
@@ -152,7 +159,7 @@ impl UserBalance {
             "#,
         )
         .bind(user_id)
-        .bind(balance.as_ref().map(|b| b.tenant_id).unwrap_or_default())
+        .bind(effective_tenant_id)
         .bind(amount)
         .fetch_one(&mut *pool)
         .await?;
@@ -176,23 +183,37 @@ impl UserBalance {
     }
 
     /// 消费（事务内执行）
+    ///
+    /// # Errors
+    /// - `DbError::NotFound` - 用户余额记录不存在
+    /// - `DbError::InsufficientBalance` - 余额不足
     pub async fn consume(
         pool: &mut sqlx::PgConnection,
         user_id: Uuid,
         amount: Decimal,
         usage_log_id: Option<Uuid>,
         description: Option<&str>,
-    ) -> Result<(UserBalance, BalanceTransaction), sqlx::Error> {
+    ) -> Result<(UserBalance, BalanceTransaction), DbError> {
         // 获取当前余额（加锁）
         let balance = sqlx::query_as::<_, UserBalance>(
             "SELECT * FROM user_balances WHERE user_id = $1 FOR UPDATE",
         )
         .bind(user_id)
-        .fetch_one(&mut *pool)
+        .fetch_optional(&mut *pool)
         .await?;
 
+        // 检查余额是否存在
+        let balance = match balance {
+            Some(b) => b,
+            None => return Err(DbError::not_found("UserBalance", user_id.to_string())),
+        };
+
+        // 检查余额是否足够
         if balance.available_balance < amount {
-            return Err(sqlx::Error::RowNotFound); // 余额不足
+            return Err(DbError::insufficient_balance(
+                amount.to_string(),
+                balance.available_balance.to_string(),
+            ));
         }
 
         let balance_before = balance.available_balance;
@@ -233,21 +254,35 @@ impl UserBalance {
     }
 
     /// 冻结余额
+    ///
+    /// # Errors
+    /// - `DbError::NotFound` - 用户余额记录不存在
+    /// - `DbError::InsufficientBalance` - 可用余额不足
     pub async fn freeze(
         pool: &mut sqlx::PgConnection,
         user_id: Uuid,
         amount: Decimal,
         description: Option<&str>,
-    ) -> Result<(UserBalance, BalanceTransaction), sqlx::Error> {
+    ) -> Result<(UserBalance, BalanceTransaction), DbError> {
         let balance = sqlx::query_as::<_, UserBalance>(
             "SELECT * FROM user_balances WHERE user_id = $1 FOR UPDATE",
         )
         .bind(user_id)
-        .fetch_one(&mut *pool)
+        .fetch_optional(&mut *pool)
         .await?;
 
+        // 检查余额是否存在
+        let balance = match balance {
+            Some(b) => b,
+            None => return Err(DbError::not_found("UserBalance", user_id.to_string())),
+        };
+
+        // 检查可用余额是否足够
         if balance.available_balance < amount {
-            return Err(sqlx::Error::RowNotFound);
+            return Err(DbError::insufficient_balance(
+                amount.to_string(),
+                balance.available_balance.to_string(),
+            ));
         }
 
         let balance_before = balance.available_balance;
@@ -317,7 +352,7 @@ impl BalanceTransaction {
         balance_before: Decimal,
         balance_after: Decimal,
         description: Option<&str>,
-    ) -> Result<BalanceTransaction, sqlx::Error> {
+    ) -> Result<BalanceTransaction, DbError> {
         let transaction = sqlx::query_as::<_, BalanceTransaction>(
             r#"
             INSERT INTO balance_transactions (
@@ -349,7 +384,7 @@ impl BalanceTransaction {
         user_id: Uuid,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<BalanceTransaction>, sqlx::Error> {
+    ) -> Result<Vec<BalanceTransaction>, DbError> {
         let transactions = sqlx::query_as::<_, BalanceTransaction>(
             r#"
             SELECT * FROM balance_transactions

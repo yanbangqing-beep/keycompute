@@ -1,3 +1,4 @@
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -56,7 +57,7 @@ impl Account {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateAccountRequest,
-    ) -> Result<Account, sqlx::Error> {
+    ) -> Result<Account, DbError> {
         let account = sqlx::query_as::<_, Account>(
             r#"
             INSERT INTO accounts (
@@ -85,7 +86,7 @@ impl Account {
     }
 
     /// 根据 ID 查找账号
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Account>, sqlx::Error> {
+    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<Account>, DbError> {
         let account = sqlx::query_as::<_, Account>("SELECT * FROM accounts WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
@@ -98,7 +99,7 @@ impl Account {
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<Account>, sqlx::Error> {
+    ) -> Result<Vec<Account>, DbError> {
         let accounts = sqlx::query_as::<_, Account>(
             "SELECT * FROM accounts WHERE tenant_id = $1 ORDER BY priority DESC, created_at ASC",
         )
@@ -113,7 +114,7 @@ impl Account {
     pub async fn find_enabled_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<Account>, sqlx::Error> {
+    ) -> Result<Vec<Account>, DbError> {
         let accounts = sqlx::query_as::<_, Account>(
             "SELECT * FROM accounts WHERE tenant_id = $1 AND enabled = TRUE ORDER BY priority DESC",
         )
@@ -125,7 +126,7 @@ impl Account {
     }
 
     /// 查找所有启用的账号（系统级，不限租户）
-    pub async fn find_enabled_all(pool: &sqlx::PgPool) -> Result<Vec<Account>, sqlx::Error> {
+    pub async fn find_enabled_all(pool: &sqlx::PgPool) -> Result<Vec<Account>, DbError> {
         let accounts = sqlx::query_as::<_, Account>(
             "SELECT * FROM accounts WHERE enabled = TRUE ORDER BY priority DESC",
         )
@@ -140,7 +141,7 @@ impl Account {
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
         model: &str,
-    ) -> Result<Vec<Account>, sqlx::Error> {
+    ) -> Result<Vec<Account>, DbError> {
         let accounts = sqlx::query_as::<_, Account>(
             r#"
             SELECT * FROM accounts
@@ -163,7 +164,7 @@ impl Account {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdateAccountRequest,
-    ) -> Result<Account, sqlx::Error> {
+    ) -> Result<Account, DbError> {
         let account = sqlx::query_as::<_, Account>(
             r#"
             UPDATE accounts
@@ -198,7 +199,7 @@ impl Account {
     }
 
     /// 删除账号
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM accounts WHERE id = $1")
             .bind(self.id)
             .execute(pool)

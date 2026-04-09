@@ -2,9 +2,10 @@
 //!
 //! 提供全局系统配置的 CRUD 操作
 
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
 /// 设置值类型
@@ -214,7 +215,7 @@ impl SystemSetting {
     pub async fn find_by_key(
         pool: &sqlx::PgPool,
         key: &str,
-    ) -> Result<Option<SystemSetting>, sqlx::Error> {
+    ) -> Result<Option<SystemSetting>, DbError> {
         let setting =
             sqlx::query_as::<_, SystemSetting>("SELECT * FROM system_settings WHERE key = $1")
                 .bind(key)
@@ -225,7 +226,7 @@ impl SystemSetting {
     }
 
     /// 获取所有设置
-    pub async fn find_all(pool: &sqlx::PgPool) -> Result<Vec<SystemSetting>, sqlx::Error> {
+    pub async fn find_all(pool: &sqlx::PgPool) -> Result<Vec<SystemSetting>, DbError> {
         let settings =
             sqlx::query_as::<_, SystemSetting>("SELECT * FROM system_settings ORDER BY key ASC")
                 .fetch_all(pool)
@@ -235,9 +236,7 @@ impl SystemSetting {
     }
 
     /// 获取所有非敏感设置
-    pub async fn find_non_sensitive(
-        pool: &sqlx::PgPool,
-    ) -> Result<Vec<SystemSetting>, sqlx::Error> {
+    pub async fn find_non_sensitive(pool: &sqlx::PgPool) -> Result<Vec<SystemSetting>, DbError> {
         let settings = sqlx::query_as::<_, SystemSetting>(
             "SELECT * FROM system_settings WHERE is_sensitive = false ORDER BY key ASC",
         )
@@ -252,7 +251,7 @@ impl SystemSetting {
         pool: &sqlx::PgPool,
         key: &str,
         value: &str,
-    ) -> Result<SystemSetting, sqlx::Error> {
+    ) -> Result<SystemSetting, DbError> {
         // 使用 INSERT ... ON CONFLICT 实现 UPSERT
         let setting = sqlx::query_as::<_, SystemSetting>(
             r#"
@@ -272,17 +271,45 @@ impl SystemSetting {
         Ok(setting)
     }
 
-    /// 批量更新设置
+    /// 批量更新设置（使用事务）
+    ///
+    /// 所有更新在同一事务中执行，保证原子性
     pub async fn batch_update(
         pool: &sqlx::PgPool,
         settings: &std::collections::HashMap<String, String>,
-    ) -> Result<Vec<SystemSetting>, sqlx::Error> {
-        let mut updated = Vec::new();
+    ) -> Result<Vec<SystemSetting>, DbError> {
+        let mut tx = pool.begin().await?;
+        let updated = Self::batch_update_tx(&mut tx, settings).await?;
+        tx.commit().await?;
+        Ok(updated)
+    }
+
+    /// 批量更新设置（在现有事务中执行）
+    ///
+    /// 用于在调用者已有事务中执行批量更新
+    pub async fn batch_update_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        settings: &std::collections::HashMap<String, String>,
+    ) -> Result<Vec<SystemSetting>, DbError> {
+        let mut updated = Vec::with_capacity(settings.len());
 
         for (key, value) in settings {
-            if let Ok(setting) = Self::update_value(pool, key, value).await {
-                updated.push(setting);
-            }
+            let setting = sqlx::query_as::<_, SystemSetting>(
+                r#"
+                INSERT INTO system_settings (key, value, value_type, description, created_at, updated_at)
+                VALUES ($1, $2, 'string', '', NOW(), NOW())
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = NOW()
+                RETURNING *
+                "#,
+            )
+            .bind(key)
+            .bind(value)
+            .fetch_one(&mut **tx)
+            .await?;
+
+            updated.push(setting);
         }
 
         Ok(updated)
@@ -291,7 +318,7 @@ impl SystemSetting {
     /// 初始化默认设置
     ///
     /// 如果设置不存在，则使用默认值创建
-    pub async fn init_default_settings(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn init_default_settings(pool: &sqlx::PgPool) -> Result<(), DbError> {
         let defaults = vec![
             // 站点设置
             (setting_keys::SITE_NAME, "KeyCompute", "string"),

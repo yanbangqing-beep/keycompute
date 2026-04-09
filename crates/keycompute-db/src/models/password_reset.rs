@@ -2,6 +2,7 @@
 //!
 //! 管理用户密码重置流程
 
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -34,7 +35,7 @@ impl PasswordReset {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreatePasswordResetRequest,
-    ) -> Result<PasswordReset, sqlx::Error> {
+    ) -> Result<PasswordReset, DbError> {
         let reset = sqlx::query_as::<_, PasswordReset>(
             r#"
             INSERT INTO password_resets (user_id, token, expires_at, requested_from_ip)
@@ -56,7 +57,7 @@ impl PasswordReset {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<PasswordReset>, sqlx::Error> {
+    ) -> Result<Option<PasswordReset>, DbError> {
         let reset =
             sqlx::query_as::<_, PasswordReset>("SELECT * FROM password_resets WHERE id = $1")
                 .bind(id)
@@ -70,7 +71,7 @@ impl PasswordReset {
     pub async fn find_by_token(
         pool: &sqlx::PgPool,
         token: &str,
-    ) -> Result<Option<PasswordReset>, sqlx::Error> {
+    ) -> Result<Option<PasswordReset>, DbError> {
         let reset =
             sqlx::query_as::<_, PasswordReset>("SELECT * FROM password_resets WHERE token = $1")
                 .bind(token)
@@ -84,7 +85,7 @@ impl PasswordReset {
     pub async fn find_valid_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Option<PasswordReset>, sqlx::Error> {
+    ) -> Result<Option<PasswordReset>, DbError> {
         let reset = sqlx::query_as::<_, PasswordReset>(
             r#"
             SELECT * FROM password_resets 
@@ -103,7 +104,7 @@ impl PasswordReset {
     }
 
     /// 标记为已使用
-    pub async fn mark_used(&self, pool: &sqlx::PgPool) -> Result<PasswordReset, sqlx::Error> {
+    pub async fn mark_used(&self, pool: &sqlx::PgPool) -> Result<PasswordReset, DbError> {
         let reset = sqlx::query_as::<_, PasswordReset>(
             r#"
             UPDATE password_resets
@@ -121,7 +122,7 @@ impl PasswordReset {
     }
 
     /// 删除重置记录
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM password_resets WHERE id = $1")
             .bind(self.id)
             .execute(pool)
@@ -131,10 +132,7 @@ impl PasswordReset {
     }
 
     /// 删除用户的所有重置记录
-    pub async fn delete_all_by_user(
-        pool: &sqlx::PgPool,
-        user_id: Uuid,
-    ) -> Result<u64, sqlx::Error> {
+    pub async fn delete_all_by_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<u64, DbError> {
         let result = sqlx::query("DELETE FROM password_resets WHERE user_id = $1")
             .bind(user_id)
             .execute(pool)

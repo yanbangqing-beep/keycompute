@@ -393,7 +393,15 @@ pub async fn update_user_balance(
         .map_err(|e| ApiError::Internal(format!("Failed to begin transaction: {}", e)))?;
 
     let (updated_balance, _transaction) = if amount > Decimal::ZERO {
-        UserBalance::recharge(&mut tx, user_id, amount, None, Some(&req.reason)).await
+        UserBalance::recharge(
+            &mut tx,
+            user_id,
+            auth.tenant_id,
+            amount,
+            None,
+            Some(&req.reason),
+        )
+        .await
     } else {
         // 负数金额视为消费
         UserBalance::consume(&mut tx, user_id, -amount, None, Some(&req.reason)).await

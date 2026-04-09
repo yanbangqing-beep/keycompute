@@ -1,3 +1,4 @@
+use crate::DbError;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -76,7 +77,7 @@ impl UsageLog {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateUsageLogRequest,
-    ) -> Result<UsageLog, sqlx::Error> {
+    ) -> Result<UsageLog, DbError> {
         let log = sqlx::query_as::<_, UsageLog>(
             r#"
             INSERT INTO usage_logs (
@@ -118,10 +119,7 @@ impl UsageLog {
     }
 
     /// 根据 ID 查找用量日志
-    pub async fn find_by_id(
-        pool: &sqlx::PgPool,
-        id: Uuid,
-    ) -> Result<Option<UsageLog>, sqlx::Error> {
+    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<UsageLog>, DbError> {
         let log = sqlx::query_as::<_, UsageLog>("SELECT * FROM usage_logs WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
@@ -134,7 +132,7 @@ impl UsageLog {
     pub async fn find_by_request_id(
         pool: &sqlx::PgPool,
         request_id: Uuid,
-    ) -> Result<Option<UsageLog>, sqlx::Error> {
+    ) -> Result<Option<UsageLog>, DbError> {
         let log = sqlx::query_as::<_, UsageLog>("SELECT * FROM usage_logs WHERE request_id = $1")
             .bind(request_id)
             .fetch_optional(pool)
@@ -149,7 +147,7 @@ impl UsageLog {
         tenant_id: Uuid,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<UsageLog>, sqlx::Error> {
+    ) -> Result<Vec<UsageLog>, DbError> {
         let logs = sqlx::query_as::<_, UsageLog>(
             r#"
             SELECT * FROM usage_logs
@@ -173,7 +171,7 @@ impl UsageLog {
         user_id: Uuid,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<UsageLog>, sqlx::Error> {
+    ) -> Result<Vec<UsageLog>, DbError> {
         let logs = sqlx::query_as::<_, UsageLog>(
             r#"
             SELECT * FROM usage_logs
@@ -197,7 +195,7 @@ impl UsageLog {
         tenant_id: Uuid,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<UsageStats, sqlx::Error> {
+    ) -> Result<UsageStats, DbError> {
         let stats = sqlx::query_as::<_, UsageStats>(
             r#"
             SELECT
@@ -227,7 +225,7 @@ impl UsageLog {
         user_id: Uuid,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<UsageStats, sqlx::Error> {
+    ) -> Result<UsageStats, DbError> {
         let stats = sqlx::query_as::<_, UsageStats>(
             r#"
             SELECT
@@ -255,7 +253,7 @@ impl UsageLog {
     pub async fn get_user_stats(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<UserUsageStats, sqlx::Error> {
+    ) -> Result<UserUsageStats, DbError> {
         let stats = sqlx::query_as::<_, UserUsageStats>(
             r#"
             SELECT

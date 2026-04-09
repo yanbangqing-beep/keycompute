@@ -1,3 +1,4 @@
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -33,7 +34,7 @@ pub struct UpdateUserRequest {
 
 impl User {
     /// 创建新用户
-    pub async fn create(pool: &sqlx::PgPool, req: &CreateUserRequest) -> Result<User, sqlx::Error> {
+    pub async fn create(pool: &sqlx::PgPool, req: &CreateUserRequest) -> Result<User, DbError> {
         let user = sqlx::query_as::<_, User>(
             r#"
             INSERT INTO users (tenant_id, email, name, role)
@@ -52,7 +53,7 @@ impl User {
     }
 
     /// 根据 ID 查找用户
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error> {
+    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<User>, DbError> {
         let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
@@ -62,10 +63,7 @@ impl User {
     }
 
     /// 根据邮箱查找用户
-    pub async fn find_by_email(
-        pool: &sqlx::PgPool,
-        email: &str,
-    ) -> Result<Option<User>, sqlx::Error> {
+    pub async fn find_by_email(pool: &sqlx::PgPool, email: &str) -> Result<Option<User>, DbError> {
         let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
             .bind(email)
             .fetch_optional(pool)
@@ -78,7 +76,7 @@ impl User {
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<User>, sqlx::Error> {
+    ) -> Result<Vec<User>, DbError> {
         let users = sqlx::query_as::<_, User>("SELECT * FROM users WHERE tenant_id = $1")
             .bind(tenant_id)
             .fetch_all(pool)
@@ -94,7 +92,7 @@ impl User {
         pool: &sqlx::PgPool,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<User>, sqlx::Error> {
+    ) -> Result<Vec<User>, DbError> {
         let users = sqlx::query_as::<_, User>(
             r#"
             SELECT * FROM users
@@ -111,7 +109,7 @@ impl User {
     }
 
     /// 统计用户总数
-    pub async fn count_all(pool: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
+    pub async fn count_all(pool: &sqlx::PgPool) -> Result<i64, DbError> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(pool)
             .await?;
@@ -124,7 +122,7 @@ impl User {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdateUserRequest,
-    ) -> Result<User, sqlx::Error> {
+    ) -> Result<User, DbError> {
         let user = sqlx::query_as::<_, User>(
             r#"
             UPDATE users
@@ -145,7 +143,7 @@ impl User {
     }
 
     /// 删除用户
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(self.id)
             .execute(pool)

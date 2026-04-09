@@ -1,3 +1,4 @@
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -38,7 +39,7 @@ impl UserReferral {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateUserReferralRequest,
-    ) -> Result<UserReferral, sqlx::Error> {
+    ) -> Result<UserReferral, DbError> {
         let referral = sqlx::query_as::<_, UserReferral>(
             r#"
             INSERT INTO user_referrals (
@@ -62,7 +63,7 @@ impl UserReferral {
     pub async fn find_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Option<UserReferral>, sqlx::Error> {
+    ) -> Result<Option<UserReferral>, DbError> {
         let referral =
             sqlx::query_as::<_, UserReferral>("SELECT * FROM user_referrals WHERE user_id = $1")
                 .bind(user_id)
@@ -76,7 +77,7 @@ impl UserReferral {
     pub async fn find_by_level1_referrer(
         pool: &sqlx::PgPool,
         referrer_id: Uuid,
-    ) -> Result<Vec<UserReferral>, sqlx::Error> {
+    ) -> Result<Vec<UserReferral>, DbError> {
         let referrals = sqlx::query_as::<_, UserReferral>(
             r#"
             SELECT * FROM user_referrals
@@ -95,7 +96,7 @@ impl UserReferral {
     pub async fn find_by_level2_referrer(
         pool: &sqlx::PgPool,
         referrer_id: Uuid,
-    ) -> Result<Vec<UserReferral>, sqlx::Error> {
+    ) -> Result<Vec<UserReferral>, DbError> {
         let referrals = sqlx::query_as::<_, UserReferral>(
             r#"
             SELECT * FROM user_referrals
@@ -114,7 +115,7 @@ impl UserReferral {
     pub async fn get_stats_by_referrer(
         pool: &sqlx::PgPool,
         referrer_id: Uuid,
-    ) -> Result<ReferralStats, sqlx::Error> {
+    ) -> Result<ReferralStats, DbError> {
         let stats = sqlx::query_as::<_, ReferralStats>(
             r#"
             SELECT
@@ -137,7 +138,7 @@ impl UserReferral {
         &self,
         pool: &sqlx::PgPool,
         status: &str,
-    ) -> Result<UserReferral, sqlx::Error> {
+    ) -> Result<UserReferral, DbError> {
         let referral = sqlx::query_as::<_, UserReferral>(
             r#"
             UPDATE user_referrals

@@ -12,7 +12,7 @@ use keycompute_auth::PasswordHasher;
 use keycompute_config::AppConfig;
 use keycompute_db::{
     CreateDistributionRuleRequest, CreateTenantRequest, CreateUserCredentialRequest,
-    CreateUserRequest, DatabaseConfig as DbConfig, DatabaseManager, SystemSetting, Tenant,
+    CreateUserRequest, Database, DatabaseConfig as DbConfig, SystemSetting, Tenant,
     TenantDistributionRule, User,
 };
 use keycompute_observability::{init_dev_observability, init_observability};
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         max_lifetime: config.database.max_lifetime_secs,
     };
 
-    let db_manager = match DatabaseManager::new(&db_config).await {
+    let db_manager = match Database::new(&db_config).await {
         Ok(manager) => {
             info!("数据库连接成功");
             manager

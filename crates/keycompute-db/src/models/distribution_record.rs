@@ -1,7 +1,8 @@
+use crate::DbError;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
 /// 分销记录模型
@@ -59,7 +60,7 @@ impl DistributionRecord {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateDistributionRecordRequest,
-    ) -> Result<DistributionRecord, sqlx::Error> {
+    ) -> Result<DistributionRecord, DbError> {
         let record = sqlx::query_as::<_, DistributionRecord>(
             r#"
             INSERT INTO distribution_records (
@@ -82,15 +83,48 @@ impl DistributionRecord {
         Ok(record)
     }
 
-    /// 批量创建分销记录
+    /// 批量创建分销记录（使用事务）
+    ///
+    /// 所有记录在同一事务中创建，保证原子性
     pub async fn create_many(
         pool: &sqlx::PgPool,
         requests: &[CreateDistributionRecordRequest],
-    ) -> Result<Vec<DistributionRecord>, sqlx::Error> {
+    ) -> Result<Vec<DistributionRecord>, DbError> {
+        let mut tx = pool.begin().await?;
+        let records = Self::create_many_tx(&mut tx, requests).await?;
+        tx.commit().await?;
+        Ok(records)
+    }
+
+    /// 批量创建分销记录（在现有事务中执行）
+    ///
+    /// 用于在调用者已有事务中执行批量插入
+    pub async fn create_many_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        requests: &[CreateDistributionRecordRequest],
+    ) -> Result<Vec<DistributionRecord>, DbError> {
         let mut records = Vec::with_capacity(requests.len());
 
         for req in requests {
-            let record = Self::create(pool, req).await?;
+            let record = sqlx::query_as::<_, DistributionRecord>(
+                r#"
+                INSERT INTO distribution_records (
+                    usage_log_id, tenant_id, beneficiary_id,
+                    share_amount, share_ratio, level, status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+                RETURNING *
+                "#,
+            )
+            .bind(req.usage_log_id)
+            .bind(req.tenant_id)
+            .bind(req.beneficiary_id)
+            .bind(&req.share_amount)
+            .bind(&req.share_ratio)
+            .bind(&req.level)
+            .fetch_one(&mut **tx)
+            .await?;
+
             records.push(record);
         }
 
@@ -101,7 +135,7 @@ impl DistributionRecord {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<DistributionRecord>, sqlx::Error> {
+    ) -> Result<Option<DistributionRecord>, DbError> {
         let record = sqlx::query_as::<_, DistributionRecord>(
             "SELECT * FROM distribution_records WHERE id = $1",
         )
@@ -116,7 +150,7 @@ impl DistributionRecord {
     pub async fn find_by_usage_log(
         pool: &sqlx::PgPool,
         usage_log_id: Uuid,
-    ) -> Result<Vec<DistributionRecord>, sqlx::Error> {
+    ) -> Result<Vec<DistributionRecord>, DbError> {
         let records = sqlx::query_as::<_, DistributionRecord>(
             "SELECT * FROM distribution_records WHERE usage_log_id = $1",
         )
@@ -133,7 +167,7 @@ impl DistributionRecord {
         tenant_id: Uuid,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<DistributionRecord>, sqlx::Error> {
+    ) -> Result<Vec<DistributionRecord>, DbError> {
         let records = sqlx::query_as::<_, DistributionRecord>(
             r#"
             SELECT * FROM distribution_records
@@ -157,7 +191,7 @@ impl DistributionRecord {
         beneficiary_id: Uuid,
         limit: i64,
         offset: i64,
-    ) -> Result<Vec<DistributionRecord>, sqlx::Error> {
+    ) -> Result<Vec<DistributionRecord>, DbError> {
         let records = sqlx::query_as::<_, DistributionRecord>(
             r#"
             SELECT * FROM distribution_records
@@ -176,7 +210,7 @@ impl DistributionRecord {
     }
 
     /// 结算分销记录
-    pub async fn settle(&self, pool: &sqlx::PgPool) -> Result<DistributionRecord, sqlx::Error> {
+    pub async fn settle(&self, pool: &sqlx::PgPool) -> Result<DistributionRecord, DbError> {
         let record = sqlx::query_as::<_, DistributionRecord>(
             r#"
             UPDATE distribution_records
@@ -197,7 +231,7 @@ impl DistributionRecord {
     pub async fn get_stats_by_beneficiary(
         pool: &sqlx::PgPool,
         beneficiary_id: Uuid,
-    ) -> Result<DistributionStats, sqlx::Error> {
+    ) -> Result<DistributionStats, DbError> {
         let stats = sqlx::query_as::<_, DistributionStats>(
             r#"
             SELECT
@@ -220,7 +254,7 @@ impl DistributionRecord {
     pub async fn get_level_stats_by_beneficiary(
         pool: &sqlx::PgPool,
         beneficiary_id: Uuid,
-    ) -> Result<DistributionLevelStats, sqlx::Error> {
+    ) -> Result<DistributionLevelStats, DbError> {
         let stats = sqlx::query_as::<_, DistributionLevelStats>(
             r#"
             SELECT
@@ -244,7 +278,7 @@ impl DistributionRecord {
         pool: &sqlx::PgPool,
         beneficiary_id: Uuid,
         referred_user_id: Uuid,
-    ) -> Result<BigDecimal, sqlx::Error> {
+    ) -> Result<BigDecimal, DbError> {
         // 查询该推荐用户产生的所有分销收益
         let result: Option<(BigDecimal,)> = sqlx::query_as(
             r#"

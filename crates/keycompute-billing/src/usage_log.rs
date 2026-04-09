@@ -412,12 +412,20 @@ impl BillingService {
 
                 Ok(())
             }
-            Err(sqlx::Error::RowNotFound) => {
+            Err(e) if e.is_insufficient_balance() => {
                 // 余额不足，回滚事务
                 tx.rollback().await.ok();
                 Err(KeyComputeError::ValidationError(format!(
                     "Insufficient balance for user {}: required {}",
                     user_id, amount
+                )))
+            }
+            Err(e) if e.is_not_found() => {
+                // 余额记录不存在，回滚事务
+                tx.rollback().await.ok();
+                Err(KeyComputeError::ValidationError(format!(
+                    "User balance not found for user {}",
+                    user_id
                 )))
             }
             Err(e) => {

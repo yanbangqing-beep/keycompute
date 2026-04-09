@@ -1,3 +1,4 @@
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -68,7 +69,7 @@ impl ProduceAiKey {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateProduceAiKeyRequest,
-    ) -> Result<ProduceAiKey, sqlx::Error> {
+    ) -> Result<ProduceAiKey, DbError> {
         let key = sqlx::query_as::<_, ProduceAiKey>(
             r#"
             INSERT INTO produce_ai_keys (tenant_id, user_id, name, produce_ai_key_hash, produce_ai_key_preview, expires_at)
@@ -92,7 +93,7 @@ impl ProduceAiKey {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<ProduceAiKey>, sqlx::Error> {
+    ) -> Result<Option<ProduceAiKey>, DbError> {
         let key = sqlx::query_as::<_, ProduceAiKey>("SELECT * FROM produce_ai_keys WHERE id = $1")
             .bind(id)
             .fetch_optional(pool)
@@ -105,7 +106,7 @@ impl ProduceAiKey {
     pub async fn find_by_hash(
         pool: &sqlx::PgPool,
         produce_ai_key_hash: &str,
-    ) -> Result<Option<ProduceAiKey>, sqlx::Error> {
+    ) -> Result<Option<ProduceAiKey>, DbError> {
         let key = sqlx::query_as::<_, ProduceAiKey>(
             "SELECT * FROM produce_ai_keys WHERE produce_ai_key_hash = $1",
         )
@@ -120,7 +121,7 @@ impl ProduceAiKey {
     pub async fn find_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+    ) -> Result<Vec<ProduceAiKey>, DbError> {
         let keys = sqlx::query_as::<_, ProduceAiKey>(
             "SELECT * FROM produce_ai_keys WHERE user_id = $1 ORDER BY created_at DESC",
         )
@@ -135,7 +136,7 @@ impl ProduceAiKey {
     pub async fn find_active_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+    ) -> Result<Vec<ProduceAiKey>, DbError> {
         let keys = sqlx::query_as::<_, ProduceAiKey>(
             "SELECT * FROM produce_ai_keys WHERE user_id = $1 AND revoked = FALSE ORDER BY created_at DESC",
         )
@@ -150,7 +151,7 @@ impl ProduceAiKey {
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<ProduceAiKey>, sqlx::Error> {
+    ) -> Result<Vec<ProduceAiKey>, DbError> {
         let keys = sqlx::query_as::<_, ProduceAiKey>(
             "SELECT * FROM produce_ai_keys WHERE tenant_id = $1 ORDER BY created_at DESC",
         )
@@ -162,7 +163,7 @@ impl ProduceAiKey {
     }
 
     /// 撤销 Produce AI Key
-    pub async fn revoke(&self, pool: &sqlx::PgPool) -> Result<ProduceAiKey, sqlx::Error> {
+    pub async fn revoke(&self, pool: &sqlx::PgPool) -> Result<ProduceAiKey, DbError> {
         let key = sqlx::query_as::<_, ProduceAiKey>(
             r#"
             UPDATE produce_ai_keys
@@ -181,7 +182,7 @@ impl ProduceAiKey {
     }
 
     /// 更新最后使用时间
-    pub async fn update_last_used(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn update_last_used(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query(
             r#"
             UPDATE produce_ai_keys

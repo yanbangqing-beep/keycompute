@@ -1,3 +1,4 @@
+use crate::DbError;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -50,7 +51,7 @@ impl TenantDistributionRule {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateDistributionRuleRequest,
-    ) -> Result<TenantDistributionRule, sqlx::Error> {
+    ) -> Result<TenantDistributionRule, DbError> {
         let rule = sqlx::query_as::<_, TenantDistributionRule>(
             r#"
             INSERT INTO tenant_distribution_rules (
@@ -79,7 +80,7 @@ impl TenantDistributionRule {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<TenantDistributionRule>, sqlx::Error> {
+    ) -> Result<Option<TenantDistributionRule>, DbError> {
         let rule = sqlx::query_as::<_, TenantDistributionRule>(
             "SELECT * FROM tenant_distribution_rules WHERE id = $1",
         )
@@ -94,7 +95,7 @@ impl TenantDistributionRule {
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<TenantDistributionRule>, sqlx::Error> {
+    ) -> Result<Vec<TenantDistributionRule>, DbError> {
         let rules = sqlx::query_as::<_, TenantDistributionRule>(
             r#"
             SELECT * FROM tenant_distribution_rules
@@ -116,7 +117,7 @@ impl TenantDistributionRule {
     pub async fn find_all_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<TenantDistributionRule>, sqlx::Error> {
+    ) -> Result<Vec<TenantDistributionRule>, DbError> {
         let rules = sqlx::query_as::<_, TenantDistributionRule>(
             "SELECT * FROM tenant_distribution_rules WHERE tenant_id = $1 ORDER BY priority DESC",
         )
@@ -132,7 +133,7 @@ impl TenantDistributionRule {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdateDistributionRuleRequest,
-    ) -> Result<TenantDistributionRule, sqlx::Error> {
+    ) -> Result<TenantDistributionRule, DbError> {
         let rule = sqlx::query_as::<_, TenantDistributionRule>(
             r#"
             UPDATE tenant_distribution_rules
@@ -161,7 +162,7 @@ impl TenantDistributionRule {
     }
 
     /// 删除规则
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM tenant_distribution_rules WHERE id = $1")
             .bind(self.id)
             .execute(pool)

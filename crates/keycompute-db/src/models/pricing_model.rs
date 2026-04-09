@@ -1,3 +1,4 @@
+use crate::DbError;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,7 @@ impl PricingModel {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreatePricingRequest,
-    ) -> Result<PricingModel, sqlx::Error> {
+    ) -> Result<PricingModel, DbError> {
         let pricing = sqlx::query_as::<_, PricingModel>(
             r#"
             INSERT INTO pricing_models (
@@ -79,7 +80,7 @@ impl PricingModel {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<PricingModel>, sqlx::Error> {
+    ) -> Result<Option<PricingModel>, DbError> {
         let pricing =
             sqlx::query_as::<_, PricingModel>("SELECT * FROM pricing_models WHERE id = $1")
                 .bind(id)
@@ -93,7 +94,7 @@ impl PricingModel {
     pub async fn find_by_tenant(
         pool: &sqlx::PgPool,
         tenant_id: Uuid,
-    ) -> Result<Vec<PricingModel>, sqlx::Error> {
+    ) -> Result<Vec<PricingModel>, DbError> {
         let pricing = sqlx::query_as::<_, PricingModel>(
             r#"
             SELECT * FROM pricing_models
@@ -115,7 +116,7 @@ impl PricingModel {
         tenant_id: Uuid,
         model_name: &str,
         provider: &str,
-    ) -> Result<Option<PricingModel>, sqlx::Error> {
+    ) -> Result<Option<PricingModel>, DbError> {
         let pricing = sqlx::query_as::<_, PricingModel>(
             r#"
             SELECT * FROM pricing_models
@@ -138,7 +139,7 @@ impl PricingModel {
     }
 
     /// 查找所有默认定价
-    pub async fn find_defaults(pool: &sqlx::PgPool) -> Result<Vec<PricingModel>, sqlx::Error> {
+    pub async fn find_defaults(pool: &sqlx::PgPool) -> Result<Vec<PricingModel>, DbError> {
         let pricing = sqlx::query_as::<_, PricingModel>(
             r#"
             SELECT * FROM pricing_models
@@ -159,7 +160,7 @@ impl PricingModel {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdatePricingRequest,
-    ) -> Result<PricingModel, sqlx::Error> {
+    ) -> Result<PricingModel, DbError> {
         let pricing = sqlx::query_as::<_, PricingModel>(
             r#"
             UPDATE pricing_models
@@ -182,7 +183,7 @@ impl PricingModel {
     }
 
     /// 删除定价
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM pricing_models WHERE id = $1")
             .bind(self.id)
             .execute(pool)

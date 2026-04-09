@@ -2,6 +2,7 @@
 //!
 //! 管理用户邮箱验证流程
 
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -34,7 +35,7 @@ impl EmailVerification {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateEmailVerificationRequest,
-    ) -> Result<EmailVerification, sqlx::Error> {
+    ) -> Result<EmailVerification, DbError> {
         // 使用 ON CONFLICT 处理重复记录
         let verification = sqlx::query_as::<_, EmailVerification>(
             r#"
@@ -62,7 +63,7 @@ impl EmailVerification {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<EmailVerification>, sqlx::Error> {
+    ) -> Result<Option<EmailVerification>, DbError> {
         let verification = sqlx::query_as::<_, EmailVerification>(
             "SELECT * FROM email_verifications WHERE id = $1",
         )
@@ -77,7 +78,7 @@ impl EmailVerification {
     pub async fn find_by_token(
         pool: &sqlx::PgPool,
         token: &str,
-    ) -> Result<Option<EmailVerification>, sqlx::Error> {
+    ) -> Result<Option<EmailVerification>, DbError> {
         let verification = sqlx::query_as::<_, EmailVerification>(
             "SELECT * FROM email_verifications WHERE token = $1",
         )
@@ -92,7 +93,7 @@ impl EmailVerification {
     pub async fn find_latest_by_user(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Option<EmailVerification>, sqlx::Error> {
+    ) -> Result<Option<EmailVerification>, DbError> {
         let verification = sqlx::query_as::<_, EmailVerification>(
             "SELECT * FROM email_verifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
         )
@@ -104,7 +105,7 @@ impl EmailVerification {
     }
 
     /// 标记为已使用
-    pub async fn mark_used(&self, pool: &sqlx::PgPool) -> Result<EmailVerification, sqlx::Error> {
+    pub async fn mark_used(&self, pool: &sqlx::PgPool) -> Result<EmailVerification, DbError> {
         let verification = sqlx::query_as::<_, EmailVerification>(
             r#"
             UPDATE email_verifications
@@ -122,7 +123,7 @@ impl EmailVerification {
     }
 
     /// 删除验证记录
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM email_verifications WHERE id = $1")
             .bind(self.id)
             .execute(pool)

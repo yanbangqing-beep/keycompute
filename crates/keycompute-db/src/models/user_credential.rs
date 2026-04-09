@@ -2,6 +2,7 @@
 //!
 //! 存储用户密码哈希和登录安全相关信息
 
+use crate::DbError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -47,7 +48,7 @@ impl UserCredential {
     pub async fn create(
         pool: &sqlx::PgPool,
         req: &CreateUserCredentialRequest,
-    ) -> Result<UserCredential, sqlx::Error> {
+    ) -> Result<UserCredential, DbError> {
         let credential = sqlx::query_as::<_, UserCredential>(
             r#"
             INSERT INTO user_credentials (user_id, password_hash)
@@ -67,7 +68,7 @@ impl UserCredential {
     pub async fn find_by_id(
         pool: &sqlx::PgPool,
         id: Uuid,
-    ) -> Result<Option<UserCredential>, sqlx::Error> {
+    ) -> Result<Option<UserCredential>, DbError> {
         let credential =
             sqlx::query_as::<_, UserCredential>("SELECT * FROM user_credentials WHERE id = $1")
                 .bind(id)
@@ -81,7 +82,7 @@ impl UserCredential {
     pub async fn find_by_user_id(
         pool: &sqlx::PgPool,
         user_id: Uuid,
-    ) -> Result<Option<UserCredential>, sqlx::Error> {
+    ) -> Result<Option<UserCredential>, DbError> {
         let credential = sqlx::query_as::<_, UserCredential>(
             "SELECT * FROM user_credentials WHERE user_id = $1",
         )
@@ -97,7 +98,7 @@ impl UserCredential {
         &self,
         pool: &sqlx::PgPool,
         req: &UpdateUserCredentialRequest,
-    ) -> Result<UserCredential, sqlx::Error> {
+    ) -> Result<UserCredential, DbError> {
         let credential = sqlx::query_as::<_, UserCredential>(
             r#"
             UPDATE user_credentials
@@ -128,7 +129,7 @@ impl UserCredential {
     }
 
     /// 删除凭证
-    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(&self, pool: &sqlx::PgPool) -> Result<(), DbError> {
         sqlx::query("DELETE FROM user_credentials WHERE id = $1")
             .bind(self.id)
             .execute(pool)
@@ -141,7 +142,7 @@ impl UserCredential {
     pub async fn increment_failed_attempts(
         &self,
         pool: &sqlx::PgPool,
-    ) -> Result<UserCredential, sqlx::Error> {
+    ) -> Result<UserCredential, DbError> {
         let credential = sqlx::query_as::<_, UserCredential>(
             r#"
             UPDATE user_credentials
@@ -163,7 +164,7 @@ impl UserCredential {
         &self,
         pool: &sqlx::PgPool,
         ip: Option<String>,
-    ) -> Result<UserCredential, sqlx::Error> {
+    ) -> Result<UserCredential, DbError> {
         let credential = sqlx::query_as::<_, UserCredential>(
             r#"
             UPDATE user_credentials
@@ -189,7 +190,7 @@ impl UserCredential {
         &self,
         pool: &sqlx::PgPool,
         duration_minutes: i64,
-    ) -> Result<UserCredential, sqlx::Error> {
+    ) -> Result<UserCredential, DbError> {
         let locked_until = Utc::now() + chrono::Duration::minutes(duration_minutes);
 
         let credential = sqlx::query_as::<_, UserCredential>(
