@@ -111,7 +111,7 @@ impl LoginService {
             .map_err(|e| KeyComputeError::DatabaseError(format!("Failed to find user: {}", e)))?
             .ok_or_else(|| {
                 // 用户不存在时返回统一错误，防止邮箱枚举
-                KeyComputeError::AuthError("邮箱或密码错误".to_string())
+                KeyComputeError::AuthError("Email or password is incorrect".to_string())
             })?;
 
         // 3. 获取凭证
@@ -120,7 +120,9 @@ impl LoginService {
             .map_err(|e| {
                 KeyComputeError::DatabaseError(format!("Failed to find credential: {}", e))
             })?
-            .ok_or_else(|| KeyComputeError::AuthError("邮箱或密码错误".to_string()))?;
+            .ok_or_else(|| {
+                KeyComputeError::AuthError("Email or password is incorrect".to_string())
+            })?;
 
         // 4. 检查账户锁定状态
         if credential.is_locked() {
@@ -151,13 +153,15 @@ impl LoginService {
                 "Failed login attempt"
             );
 
-            return Err(KeyComputeError::AuthError("邮箱或密码错误".to_string()));
+            return Err(KeyComputeError::AuthError(
+                "Email or password is incorrect".to_string(),
+            ));
         }
 
         // 6. 检查邮箱验证状态
         if !credential.email_verified {
             return Err(KeyComputeError::AuthError(
-                "请先验证邮箱后再登录".to_string(),
+                "Email is not verified".to_string(),
             ));
         }
 
@@ -236,7 +240,7 @@ impl LoginService {
         let user = User::find_by_id(&self.pool, claims.user_id)
             .await
             .map_err(|e| KeyComputeError::DatabaseError(format!("Failed to find user: {}", e)))?
-            .ok_or_else(|| KeyComputeError::AuthError("用户不存在".to_string()))?;
+            .ok_or_else(|| KeyComputeError::AuthError("User does not exist".to_string()))?;
 
         // 检查凭证状态
         let credential = UserCredential::find_by_user_id(&self.pool, user.id)
@@ -244,14 +248,18 @@ impl LoginService {
             .map_err(|e| {
                 KeyComputeError::DatabaseError(format!("Failed to find credential: {}", e))
             })?
-            .ok_or_else(|| KeyComputeError::AuthError("用户凭证不存在".to_string()))?;
+            .ok_or_else(|| {
+                KeyComputeError::AuthError("User credential does not exist".to_string())
+            })?;
 
         if credential.is_locked() {
-            return Err(KeyComputeError::AuthError("账户已被锁定".to_string()));
+            return Err(KeyComputeError::AuthError("Account is locked".to_string()));
         }
 
         if !credential.email_verified {
-            return Err(KeyComputeError::AuthError("邮箱未验证".to_string()));
+            return Err(KeyComputeError::AuthError(
+                "Email is not verified".to_string(),
+            ));
         }
 
         // 生成新 Token
