@@ -1,0 +1,107 @@
+name: Bug Report
+description: Report a problem to help us improve KeyCompute
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this issue! Please fill out the information below to help us diagnose the problem.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug
+      placeholder: "e.g., API request returns 500 error"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Please provide detailed steps to reproduce the issue
+      placeholder: |
+        1. Set environment variable '...'
+        2. Start the service '...'
+        3. Send request '...'
+        4. See the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen
+      placeholder: "e.g., Request should return 200 status code"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: A clear and concise description of what actually happened
+      placeholder: "e.g., Returns 500 error with message '...'"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Please paste relevant log output if available
+      render: shell
+      placeholder: |
+        ERROR keycompute_server::handlers: request failed: ...
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem
+      placeholder: Drag and drop images here
+
+  - type: textarea
+    id: component
+    attributes:
+      label: Affected Component
+      description: Please specify the affected module or component
+      placeholder: "e.g., keycompute-server, keycompute-auth, llm-gateway"
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Please provide your environment information
+      value: |
+        - OS: [e.g., Ubuntu 22.04]
+        - Rust version: [e.g., 1.92.0]
+        - KeyCompute version: [e.g., v0.1.0]
+        - Deployment: [Docker Compose / Local development]
+        - PostgreSQL version: [e.g., 16]
+        - Redis version: [e.g., 7]
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: "e.g., This issue only occurs when Redis rate limiting is enabled"
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing Issues and confirmed this is a new issue
+          required: true
+        - label: I have read the relevant sections in CONTRIBUTING.md
+          required: false

@@ -297,6 +297,13 @@ cargo build -p keycompute-server --features redis
 
 # 如何贡献
 
+我们欢迎各种形式的贡献！请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与项目开发。
+
+- 🐛 [报告 Bug](https://github.com/aiqubits/keycompute/issues/new?template=bug_report.yml)
+- 💡 [功能建议](https://github.com/aiqubits/keycompute/issues/new?template=feature_request.yml)
+- 🔧 [提交代码](CONTRIBUTING.md)
+
+---
 
 # 许可证
 
