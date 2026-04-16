@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """
-简单的对话 Demo，使用 OpenAI 兼容格式的 API
+简单的对话 Demo，使用 OpenAI 兼容格式的 API（非流式响应）
 """
 
-import os
 from openai import OpenAI
 
 # 配置
 
-# API_URL = "https://api.deepseek.com/v1"
-# API_KEY = "sk-70f08cda30ee4e56bd0d27223dec522f"
-# API_MODEL = "deepseek-chat"
+API_URL="http://192.168.100.100:3000/v1"
+API_KEY="sk-cf305348ea684a09bcdcc284df7c56e09b92f9eecd4b462e"
+API_MODEL="deepseek-chat"
 
-API_URL = "https://ox3pktn54s-80.cnb.run/v1"
-API_KEY = "sk-d7a68473cf07467a9eb950405dc37340cacae2e1b49c487a"
-API_MODEL = "deepseek-chat"
+# API_URL="https://l98bpnylfm-80.cnb.run/v1"
+# API_KEY="sk-4c027bf3f61241c1a6cd3d2c1c0dcfc701f51db4b86345c3"
+# API_MODEL="gemma3:270m"
 
 client = OpenAI(base_url=API_URL, api_key=API_KEY)
 
@@ -24,7 +23,12 @@ def chat():
     print("对话已开始，输入 'quit' 退出\n")
 
     while True:
-        user_input = input("你: ").strip()
+        try:
+            user_input = input("你: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n对话已结束")
+            break
+
         if user_input.lower() == "quit":
             break
         if not user_input:
@@ -47,6 +51,9 @@ def chat():
             print()
 
             messages.append({"role": "assistant", "content": reply})
+        except KeyboardInterrupt:
+            print("\n对话已结束")
+            break
         except Exception as e:
             print(f"\n错误: {e}\n")
             # 移除失败的消息，允许重试
@@ -54,4 +61,7 @@ def chat():
 
 
 if __name__ == "__main__":
-    chat()
+    try:
+        chat()
+    except KeyboardInterrupt:
+        print("\n对话已结束")
