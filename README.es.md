@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./logo.jpg" alt="KeyCompute logo" width="160" style="border-radius: 20px;" />
+
 # KeyCompute
 
 <p align="center">
