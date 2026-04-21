@@ -192,12 +192,20 @@ fn setup_shutdown_handler() -> tokio::sync::oneshot::Receiver<()> {
 /// 环境变量：
 /// - KC__DEFAULT_ADMIN_EMAIL: 管理员邮箱
 /// - KC__DEFAULT_ADMIN_PASSWORD: 管理员密码
+fn non_empty_or_default(value: Option<String>, default: &str) -> String {
+    value
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn env_var_or_default(key: &str, default: &str) -> String {
+    non_empty_or_default(std::env::var(key).ok(), default)
+}
+
 async fn initialize_default_admin(pool: &sqlx::PgPool) -> anyhow::Result<()> {
     // 从环境变量读取配置
-    let admin_email = std::env::var("KC__DEFAULT_ADMIN_EMAIL")
-        .unwrap_or_else(|_| "admin@keycompute.local".to_string());
-    let admin_password =
-        std::env::var("KC__DEFAULT_ADMIN_PASSWORD").unwrap_or_else(|_| "12345".to_string());
+    let admin_email = env_var_or_default("KC__DEFAULT_ADMIN_EMAIL", "admin@keycompute.local");
+    let admin_password = env_var_or_default("KC__DEFAULT_ADMIN_PASSWORD", "12345");
 
     info!(email = %admin_email, "检查默认管理员账户");
 
@@ -385,6 +393,35 @@ async fn initialize_default_distribution_rules(
 
     info!(tenant_id = %tenant_id, "默认分销规则初始化完成");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::non_empty_or_default;
+
+    #[test]
+    fn test_non_empty_or_default_uses_non_empty_value() {
+        let resolved = non_empty_or_default(
+            Some("admin@example.com".to_string()),
+            "fallback@example.com",
+        );
+
+        assert_eq!(resolved, "admin@example.com");
+    }
+
+    #[test]
+    fn test_non_empty_or_default_falls_back_for_empty_value() {
+        let resolved = non_empty_or_default(Some(String::new()), "fallback");
+
+        assert_eq!(resolved, "fallback");
+    }
+
+    #[test]
+    fn test_non_empty_or_default_falls_back_for_missing_value() {
+        let resolved = non_empty_or_default(None, "fallback");
+
+        assert_eq!(resolved, "fallback");
+    }
 }
 
 /// 初始化管理员余额
