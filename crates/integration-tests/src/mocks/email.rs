@@ -6,7 +6,7 @@ use keycompute_emailserver::EmailError;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-const DEFAULT_PUBLIC_APP_BASE_URL: &str = "http://localhost:3000";
+const DEFAULT_PUBLIC_APP_BASE_URL: &str = "http://localhost:80";
 
 /// 模拟邮件记录
 #[derive(Debug, Clone)]

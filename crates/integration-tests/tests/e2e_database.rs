@@ -117,7 +117,6 @@ async fn create_test_tenant(pool: &PgPool, suffix: &str, test_id: &str) -> Tenan
             description: Some(format!("Test tenant for {}", suffix)),
             default_rpm_limit: Some(100),
             default_tpm_limit: Some(50000),
-            distribution_enabled: Some(false),
         },
     )
     .await
@@ -302,7 +301,6 @@ async fn test_tenant_crud() {
         status: None,
         default_rpm_limit: Some(200),
         default_tpm_limit: Some(100000),
-        distribution_enabled: Some(true),
     };
     let updated = tenant.update(&pool, &update_req).await;
     chain.add_step(
@@ -320,11 +318,8 @@ async fn test_tenant_crud() {
         chain.add_step(
             "keycompute-db",
             "verify_update",
-            format!(
-                "RPM: {}, TPM: {}, Distribution: {}",
-                t.default_rpm_limit, t.default_tpm_limit, t.distribution_enabled
-            ),
-            t.default_rpm_limit == 200 && t.distribution_enabled,
+            format!("RPM: {}, TPM: {}", t.default_rpm_limit, t.default_tpm_limit),
+            t.default_rpm_limit == 200 && t.default_tpm_limit == 100000,
         );
     }
 

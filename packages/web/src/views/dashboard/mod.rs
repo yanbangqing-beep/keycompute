@@ -10,6 +10,7 @@ use crate::services::{
     distribution_service, payment_service,
 };
 use crate::stores::auth_store::AuthStore;
+use crate::stores::public_settings_store::PublicSettingsStore;
 use crate::stores::user_store::UserStore;
 use crate::utils::time::format_time;
 
@@ -24,9 +25,14 @@ pub fn Dashboard() -> Element {
     let i18n = use_i18n();
     let user_store = use_context::<UserStore>();
     let auth_store = use_context::<AuthStore>();
+    let public_settings_store = use_context::<PublicSettingsStore>();
 
     let user_info = user_store.info.read().clone();
     let is_admin = user_info.as_ref().map(|u| u.is_admin()).unwrap_or(false);
+    let distribution_settings_loaded = public_settings_store.loaded();
+    let distribution_enabled = public_settings_store.distribution_enabled();
+    let show_distribution_metrics =
+        !is_admin && distribution_settings_loaded && !matches!(distribution_enabled, Some(false));
 
     let usage_stats = use_resource(move || {
         let auth = auth_store.clone();
@@ -82,11 +88,21 @@ pub fn Dashboard() -> Element {
 
     let distribution_earnings = use_resource(move || {
         let auth = auth_store.clone();
+        let public_settings_store = public_settings_store;
         async move {
-            with_auto_refresh(auth, |token| async move {
-                distribution_service::get_earnings(&token).await
-            })
-            .await
+            if !public_settings_store.loaded() {
+                return None;
+            }
+            if matches!(public_settings_store.distribution_enabled(), Some(false)) {
+                return Some(Ok(None));
+            }
+
+            Some(
+                with_auto_refresh(auth, |token| async move {
+                    distribution_service::get_earnings(&token).await.map(Some)
+                })
+                .await,
+            )
         }
     });
 
@@ -212,6 +228,21 @@ pub fn Dashboard() -> Element {
         .and_then(|result| result.as_ref().ok())
         .and_then(|value| value.as_ref())
         .cloned();
+    let distribution_earnings_value = distribution_earnings();
+    let distribution_earnings_data = distribution_earnings_value
+        .as_ref()
+        .and_then(|result| result.as_ref())
+        .and_then(|result| result.as_ref().ok())
+        .and_then(|earnings| earnings.as_ref());
+    let total_distribution_earnings_value = distribution_earnings_data
+        .map(|earnings| format!("{} {}", earnings.currency, earnings.total_earnings))
+        .unwrap_or_else(|| "—".to_string());
+    let pending_distribution_earnings_value = distribution_earnings_data
+        .map(|earnings| format!("{} {}", earnings.currency, earnings.pending_earnings))
+        .unwrap_or_else(|| "—".to_string());
+    let distribution_referral_count_value = distribution_earnings_data
+        .map(|earnings| earnings.referral_count.to_string())
+        .unwrap_or_else(|| "—".to_string());
 
     rsx! {
         div { class: "page-container dashboard-console",
@@ -496,32 +527,22 @@ pub fn Dashboard() -> Element {
                                 sub: i18n.t("dashboard.fallback_count_desc").to_string()
                             }
                         } else {
-                            DashboardStatusMetric {
-                                label: i18n.t("dashboard.total_distribution_earnings").to_string(),
-                                value: distribution_earnings()
-                                    .as_ref()
-                                    .and_then(|result| result.as_ref().ok())
-                                    .map(|earnings| format!("{} {}", earnings.currency, earnings.total_earnings))
-                                    .unwrap_or_else(|| "—".to_string()),
-                                sub: i18n.t("dashboard.total_distribution_earnings_desc").to_string()
-                            }
-                            DashboardStatusMetric {
-                                label: i18n.t("dashboard.pending_distribution_earnings").to_string(),
-                                value: distribution_earnings()
-                                    .as_ref()
-                                    .and_then(|result| result.as_ref().ok())
-                                    .map(|earnings| format!("{} {}", earnings.currency, earnings.pending_earnings))
-                                    .unwrap_or_else(|| "—".to_string()),
-                                sub: i18n.t("dashboard.pending_distribution_earnings_desc").to_string()
-                            }
-                            DashboardStatusMetric {
-                                label: i18n.t("distribution.referral_count").to_string(),
-                                value: distribution_earnings()
-                                    .as_ref()
-                                    .and_then(|result| result.as_ref().ok())
-                                    .map(|earnings| earnings.referral_count.to_string())
-                                    .unwrap_or_else(|| "—".to_string()),
-                                sub: i18n.t("dashboard.referral_count_desc").to_string()
+                            if show_distribution_metrics {
+                                DashboardStatusMetric {
+                                    label: i18n.t("dashboard.total_distribution_earnings").to_string(),
+                                    value: total_distribution_earnings_value.clone(),
+                                    sub: i18n.t("dashboard.total_distribution_earnings_desc").to_string()
+                                }
+                                DashboardStatusMetric {
+                                    label: i18n.t("dashboard.pending_distribution_earnings").to_string(),
+                                    value: pending_distribution_earnings_value.clone(),
+                                    sub: i18n.t("dashboard.pending_distribution_earnings_desc").to_string()
+                                }
+                                DashboardStatusMetric {
+                                    label: i18n.t("distribution.referral_count").to_string(),
+                                    value: distribution_referral_count_value.clone(),
+                                    sub: i18n.t("dashboard.referral_count_desc").to_string()
+                                }
                             }
                             DashboardStatusMetric {
                                 label: i18n.t("dashboard.latest_order").to_string(),

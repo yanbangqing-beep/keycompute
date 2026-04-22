@@ -370,6 +370,7 @@ pub static ZH: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| 
     m.insert("distribution.total_spent", "消费总额");
     m.insert("distribution.my_earnings", "我的收益");
     m.insert("distribution.no_referrals", "暂无推荐记录");
+    m.insert("distribution.disabled_message", "分销功能当前未开启");
 
     // ── Settings ────────────────────────────────
     m.insert(
@@ -424,6 +425,20 @@ pub static ZH: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| 
     m.insert("settings.save_failed", "保存失败");
     m.insert("settings.non_negative", "值不能为负数");
     m.insert("settings.invalid_number", "请输入有效的数字");
+    m.insert("settings.distribution_title", "分销开关");
+    m.insert(
+        "settings.distribution_desc",
+        "分销功能只保留一个全局开关，由 system 角色统一控制。",
+    );
+    m.insert("settings.distribution_enabled_label", "启用分销功能");
+    m.insert(
+        "settings.distribution_enabled_desc",
+        "开启后用户可访问分销中心及推荐相关接口；关闭后相关接口会返回禁用状态。",
+    );
+    m.insert(
+        "settings.distribution_enabled_system_only_desc",
+        "当前状态仅供查看。只有 system 角色可以在后台修改分销开关。",
+    );
 
     // ── Pricing ─────────────────────────────────
     m.insert("pricing.admin_desc", "管理平台定价策略，设置模型调用费率");

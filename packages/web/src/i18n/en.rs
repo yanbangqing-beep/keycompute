@@ -430,6 +430,10 @@ pub static EN: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| 
     m.insert("distribution.total_spent", "Total Spent");
     m.insert("distribution.my_earnings", "My Earnings");
     m.insert("distribution.no_referrals", "No referral records yet");
+    m.insert(
+        "distribution.disabled_message",
+        "Distribution is currently disabled",
+    );
 
     // ── Settings ────────────────────────────────
     m.insert(
@@ -472,6 +476,20 @@ pub static EN: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| 
     m.insert("settings.save_failed", "Failed to save");
     m.insert("settings.non_negative", "Value cannot be negative");
     m.insert("settings.invalid_number", "Please enter a valid number");
+    m.insert("settings.distribution_title", "Distribution Switch");
+    m.insert(
+        "settings.distribution_desc",
+        "Distribution now uses a single global switch managed only by the system role.",
+    );
+    m.insert("settings.distribution_enabled_label", "Enable Distribution");
+    m.insert(
+        "settings.distribution_enabled_desc",
+        "When enabled, users can access the distribution center and referral APIs. When disabled, those endpoints return a disabled state.",
+    );
+    m.insert(
+        "settings.distribution_enabled_system_only_desc",
+        "Current status is read-only here. Only the system role can change the distribution switch in the admin console.",
+    );
 
     // ── Pricing ─────────────────────────────────
     m.insert(

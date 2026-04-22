@@ -32,7 +32,7 @@ pub use redis::RedisConfig;
 pub use server::ServerConfig;
 
 /// 全局应用配置
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     /// 对外公开的前端应用基础 URL（可选）
     pub app_base_url: Option<String>,
@@ -54,6 +54,22 @@ pub struct AppConfig {
     pub distribution: DistributionConfig,
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            app_base_url: Some(Self::default_app_base_url()),
+            server: ServerConfig::default(),
+            database: DatabaseConfig::default(),
+            redis: None,
+            auth: AuthConfig::default(),
+            gateway: GatewayConfig::default(),
+            crypto: None,
+            email: EmailConfig::default(),
+            distribution: DistributionConfig::default(),
+        }
+    }
+}
+
 /// 配置加载错误
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigLoadError {
@@ -68,11 +84,24 @@ pub enum ConfigLoadError {
 }
 
 impl AppConfig {
+    fn default_app_base_url() -> String {
+        "http://localhost:80".to_string()
+    }
+
+    pub fn resolved_app_base_url(&self) -> String {
+        Self::normalize_app_base_url(self.app_base_url.clone())
+            .unwrap_or_else(Self::default_app_base_url)
+    }
+
     fn apply_global_env_overrides(mut app_config: AppConfig) -> AppConfig {
         if let Ok(url) = std::env::var("APP_BASE_URL") {
             app_config.app_base_url = Self::normalize_app_base_url(Some(url));
         } else {
             app_config.app_base_url = Self::normalize_app_base_url(app_config.app_base_url);
+        }
+
+        if app_config.app_base_url.is_none() {
+            app_config.app_base_url = Some(Self::default_app_base_url());
         }
 
         app_config
@@ -413,15 +442,22 @@ impl AppConfig {
             }
         }
 
-        if let Some(base_url) = self.app_base_url.as_deref() {
-            Self::validate_public_app_base_url(base_url)
-                .map_err(ConfigLoadError::ValidationError)?;
-        } else if email_is_configured {
-            return Err(ConfigLoadError::ValidationError(
-                "启用 Email 服务时必须配置 APP_BASE_URL".to_string(),
-            ));
-        } else {
-            tracing::info!("💡 提示: 未配置 APP_BASE_URL，需要公开链接的功能将返回配置错误");
+        let resolved_app_base_url = self.resolved_app_base_url();
+        Self::validate_public_app_base_url(&resolved_app_base_url)
+            .map_err(ConfigLoadError::ValidationError)?;
+
+        if self.app_base_url.is_none() {
+            tracing::info!(
+                "💡 提示: 未显式配置 APP_BASE_URL，已回退为 {}",
+                resolved_app_base_url
+            );
+        }
+
+        if email_is_configured && self.app_base_url.is_none() {
+            tracing::info!(
+                "💡 Email 服务将使用默认公开地址 {} 生成链接",
+                resolved_app_base_url
+            );
         }
 
         // 加密配置提醒
@@ -514,6 +550,7 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.server.port, 3000);
         assert_eq!(config.server.bind_addr, "0.0.0.0");
+        assert_eq!(config.app_base_url.as_deref(), Some("http://localhost:80"));
     }
 
     #[test]
@@ -686,22 +723,32 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_app_base_url_missing_when_email_enabled() {
+    fn test_validate_app_base_url_falls_back_when_email_enabled() {
         let mut config = AppConfig::default();
         config.auth.jwt_secret = "a-very-secure-jwt-secret-key-for-testing".to_string();
+        config.app_base_url = None;
         config.email.smtp_host = "localhost".to_string();
         config.email.smtp_username = "mailer".to_string();
         config.email.smtp_password = "secret".to_string();
         config.email.from_address = "noreply@example.com".to_string();
 
         let result = config.validate();
-        assert!(result.is_err());
-        match result {
-            Err(ConfigLoadError::ValidationError(msg)) => {
-                assert!(msg.contains("APP_BASE_URL"));
-            }
-            _ => panic!("期望 ValidationError"),
-        }
+        assert!(result.is_ok());
+        assert_eq!(config.resolved_app_base_url(), "http://localhost:80");
+    }
+
+    #[test]
+    fn test_resolved_app_base_url_falls_back_to_fixed_localhost_80() {
+        let config = AppConfig {
+            app_base_url: None,
+            server: ServerConfig {
+                port: 8088,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(config.resolved_app_base_url(), "http://localhost:80");
     }
 
     #[test]

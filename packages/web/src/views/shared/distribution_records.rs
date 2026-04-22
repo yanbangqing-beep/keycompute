@@ -4,7 +4,10 @@ use ui::{Badge, BadgeVariant, Pagination, Table, TableHead};
 const PAGE_SIZE: usize = 20;
 
 use crate::hooks::use_i18n::use_i18n;
-use crate::services::{api_client::with_auto_refresh, distribution_service};
+use crate::services::{
+    api_client::{user_error_message, with_auto_refresh},
+    distribution_service,
+};
 use crate::stores::auth_store::AuthStore;
 use crate::stores::user_store::UserStore;
 use crate::utils::time::format_time;
@@ -138,7 +141,7 @@ pub fn DistributionRecords() -> Element {
                 }
                 match rules() {
                     None => rsx! { p { class: "text-secondary", {i18n.t("table.loading")} } },
-                    Some(Err(_)) => rsx! { p { class: "text-secondary", {i18n.t("common.load_failed")} } },
+                    Some(Err(ref e)) => rsx! { p { class: "text-secondary", {user_error_message(e)} } },
                     Some(Ok(ref list)) if list.is_empty() => rsx! {
                         p { class: "text-secondary", {i18n.t("distribution_records.no_rules")} }
                     },
@@ -179,16 +182,18 @@ pub fn DistributionRecords() -> Element {
         if is_admin {
             {
                 let (is_empty, empty_text) = match admin_records() {
-                    None => (true, i18n.t("table.loading")),
-                    Some(Err(_)) => (true, i18n.t("common.load_failed")),
-                    Some(Ok(ref l)) if l.is_empty() => (true, i18n.t("distribution_records.empty_admin")),
-                    _ => (false, ""),
+                    None => (true, i18n.t("table.loading").to_string()),
+                    Some(Err(ref e)) => (true, user_error_message(e)),
+                    Some(Ok(ref l)) if l.is_empty() => {
+                        (true, i18n.t("distribution_records.empty_admin").to_string())
+                    }
+                    _ => (false, String::new()),
                 };
                 let admin_start = (page() as usize - 1) * PAGE_SIZE;
                 rsx! {
                     Table {
                         empty: is_empty,
-                        empty_text: empty_text.to_string(),
+                        empty_text,
                         col_count: 7u32,
                         thead {
                             tr {
@@ -214,8 +219,8 @@ pub fn DistributionRecords() -> Element {
                                                 { format!("{}…", &rec.referred_id[..rec.referred_id.len().min(8)]) }
                                             }
                                         }
-                                        td { "¥{rec.amount:.2}" }
-                                        td { "¥{rec.commission:.2}" }
+                                        td { "¥{rec.amount}" }
+                                        td { "¥{rec.commission}" }
                                         td {
                                             Badge {
                                                 variant: dist_status_variant(&rec.status),
@@ -240,16 +245,18 @@ pub fn DistributionRecords() -> Element {
         } else {
             {
                 let (is_empty, empty_text) = match referrals() {
-                    None => (true, i18n.t("table.loading")),
-                    Some(Err(_)) => (true, i18n.t("common.load_failed")),
-                    Some(Ok(ref l)) if l.is_empty() => (true, i18n.t("distribution_records.empty_user")),
-                    _ => (false, ""),
+                    None => (true, i18n.t("table.loading").to_string()),
+                    Some(Err(ref e)) => (true, user_error_message(e)),
+                    Some(Ok(ref l)) if l.is_empty() => {
+                        (true, i18n.t("distribution_records.empty_user").to_string())
+                    }
+                    _ => (false, String::new()),
                 };
                 let ref_start = (page() as usize - 1) * PAGE_SIZE;
                 rsx! {
                     Table {
                         empty: is_empty,
-                        empty_text: empty_text.to_string(),
+                        empty_text,
                         col_count: 4u32,
                         thead {
                             tr {
@@ -272,8 +279,8 @@ pub fn DistributionRecords() -> Element {
                                             }
                                         }
                                         td { { format_time(&r.joined_at) } }
-                                        td { "¥{r.total_spent:.2}" }
-                                        td { "¥{r.earnings_from_referral:.2}" }
+                                        td { "¥{r.total_spent}" }
+                                        td { "¥{r.earnings_from_referral}" }
                                     }
                                 }
                             }

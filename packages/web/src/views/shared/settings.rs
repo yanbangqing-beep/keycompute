@@ -3,8 +3,9 @@ use ui::{Button, ButtonVariant};
 
 use crate::hooks::use_i18n::use_i18n;
 use crate::services::{api_client::with_auto_refresh, settings_service};
-use crate::stores::auth_store::AuthStore;
-use crate::stores::user_store::UserStore;
+use crate::stores::{
+    auth_store::AuthStore, public_settings_store::PublicSettingsStore, user_store::UserStore,
+};
 
 /// 系统设置页面
 ///
@@ -15,11 +16,11 @@ pub fn Settings() -> Element {
     let i18n = use_i18n();
     let user_store = use_context::<UserStore>();
     let auth_store = use_context::<AuthStore>();
-    let is_admin = user_store
-        .info
-        .read()
+    let current_user = user_store.info.read().clone();
+    let is_admin = current_user.as_ref().map(|u| u.is_admin()).unwrap_or(false);
+    let is_system = current_user
         .as_ref()
-        .map(|u| u.is_admin())
+        .map(|u| u.role == "system")
         .unwrap_or(false);
 
     let settings = use_resource(move || async move {
@@ -44,6 +45,7 @@ pub fn Settings() -> Element {
     let min_recharge = get_val("min_recharge_amount");
     let default_user_quota = get_val("default_user_quota");
     let jwt_expire = get_val("jwt_expire_hours");
+    let distribution_enabled = get_val("distribution_enabled");
 
     rsx! {
         div { class: "page-container settings-console-page",
@@ -166,6 +168,33 @@ pub fn Settings() -> Element {
                                     save_ok,
                                     save_error,
                                     allow_negative: false
+                                }
+                            }
+                        }
+
+                        div { class: "settings-section-card",
+                            div { class: "settings-section-head",
+                                div {
+                                    h3 { class: "settings-section-title", {i18n.t("settings.distribution_title")} }
+                                    p { class: "settings-section-description",
+                                        {i18n.t("settings.distribution_desc")}
+                                    }
+                                }
+                            }
+                            div { class: "settings-section-body",
+                                SettingItemToggle {
+                                    label: i18n.t("settings.distribution_enabled_label").to_string(),
+                                    description: if is_system {
+                                        i18n.t("settings.distribution_enabled_desc").to_string()
+                                    } else {
+                                        i18n.t("settings.distribution_enabled_system_only_desc").to_string()
+                                    },
+                                    setting_key: "distribution_enabled",
+                                    value: distribution_enabled.clone(),
+                                    editable: is_system,
+                                    auth_store,
+                                    save_ok,
+                                    save_error
                                 }
                             }
                         }
@@ -446,6 +475,7 @@ fn SettingItemToggle(
     mut save_error: Signal<String>,
 ) -> Element {
     let i18n = use_i18n();
+    let public_settings_store = use_context::<PublicSettingsStore>();
     let mut edit_val = use_signal(|| value.clone());
     let mut saving = use_signal(|| false);
 
@@ -482,6 +512,10 @@ fn SettingItemToggle(
                                         let json_val = serde_json::Value::String(new_val.to_string());
                                         match settings_service::update_by_key(&k, &json_val, &token).await {
                                             Ok(_) => {
+                                                if k == "distribution_enabled" {
+                                                    let mut store = public_settings_store;
+                                                    store.set_distribution_enabled(new_val == "true");
+                                                }
                                                 *save_ok.write() = true;
                                                 *saving.write() = false;
                                             }

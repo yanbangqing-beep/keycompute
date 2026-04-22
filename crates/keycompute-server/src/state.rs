@@ -64,7 +64,7 @@ impl AppStateConfig {
     /// 从 keycompute_config::AppConfig 创建
     pub fn from_config(config: &keycompute_config::AppConfig) -> Self {
         Self {
-            app_base_url: config.app_base_url.clone(),
+            app_base_url: Some(config.resolved_app_base_url()),
             rate_limit: if let Some(redis) = &config.redis {
                 RateLimitBackendConfig::Redis {
                     url: redis.url.clone(),

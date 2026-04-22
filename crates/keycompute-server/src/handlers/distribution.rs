@@ -53,20 +53,14 @@ fn default_limit() -> Option<i64> {
 pub struct DistributionRecordResponse {
     /// 记录 ID
     pub id: String,
-    /// 关联的 usage_log ID
-    pub usage_log_id: String,
-    /// 租户 ID
-    pub tenant_id: String,
-    /// 受益人 ID
-    pub beneficiary_id: String,
-    /// 受益人名称
-    pub beneficiary_name: String,
-    /// 分成金额
-    pub share_amount: String,
-    /// 分成比例
-    pub share_ratio: String,
-    /// 分销层级: level1, level2
-    pub level: String,
+    /// 推荐人（受益人）ID
+    pub referrer_id: String,
+    /// 被推荐用户 ID
+    pub referred_id: String,
+    /// 被推荐用户消费金额
+    pub amount: String,
+    /// 分销佣金
+    pub commission: String,
     /// 状态: pending, settled, cancelled
     pub status: String,
     /// 创建时间
@@ -282,16 +276,18 @@ pub async fn generate_invite_link(
 /// 推荐人信息
 #[derive(Debug, Serialize)]
 pub struct ReferralInfo {
-    /// 用户 ID
-    pub user_id: String,
-    /// 用户名/邮箱
-    pub user_name: String,
-    /// 层级
-    pub level: String,
+    /// 被推荐用户 ID
+    pub id: String,
+    /// 被推荐用户邮箱
+    pub email: String,
+    /// 被推荐用户昵称
+    pub name: Option<String>,
     /// 注册时间
-    pub registered_at: String,
-    /// 产生的收益
-    pub total_earnings: String,
+    pub created_at: String,
+    /// 被推荐用户累计消费
+    pub total_consumption: String,
+    /// 当前用户从该推荐用户获得的收益
+    pub earnings: String,
 }
 
 // ==================== 辅助函数 ====================
@@ -317,13 +313,79 @@ async fn check_distribution_enabled(pool: &sqlx::PgPool) -> Result<()> {
                 ApiError::Internal(format!("Failed to query distribution setting: {}", e))
             })?
             .map(|setting| setting.parse_bool())
-            .unwrap_or(false);
+            // 与默认初始化保持一致：缺失设置时按启用处理，避免升级环境漏种默认值时误判为禁用。
+            .unwrap_or(true);
 
     if enabled {
         Ok(())
     } else {
         Err(ApiError::Forbidden("Distribution is disabled".to_string()))
     }
+}
+
+async fn build_distribution_record_response(
+    pool: &sqlx::PgPool,
+    record: keycompute_db::DistributionRecord,
+) -> Result<DistributionRecordResponse> {
+    let usage_log = keycompute_db::UsageLog::find_by_id(pool, record.usage_log_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    let (referred_id, amount) = usage_log
+        .map(|usage_log| {
+            (
+                usage_log.user_id.to_string(),
+                bigdecimal_to_string(&usage_log.user_amount),
+            )
+        })
+        .unwrap_or_else(|| (record.usage_log_id.to_string(), "0".to_string()));
+
+    Ok(DistributionRecordResponse {
+        id: record.id.to_string(),
+        referrer_id: record.beneficiary_id.to_string(),
+        referred_id,
+        amount,
+        commission: bigdecimal_to_string(&record.share_amount),
+        status: record.status,
+        created_at: record.created_at.to_rfc3339(),
+    })
+}
+
+async fn build_referral_info(
+    pool: &sqlx::PgPool,
+    beneficiary_id: Uuid,
+    referral: keycompute_db::UserReferral,
+) -> Result<ReferralInfo> {
+    let user = keycompute_db::User::find_by_id(pool, referral.user_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    let usage_stats = keycompute_db::UsageLog::get_user_stats(pool, referral.user_id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    let earnings = keycompute_db::DistributionRecord::get_earnings_for_referral(
+        pool,
+        beneficiary_id,
+        referral.user_id,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    let email = user
+        .as_ref()
+        .map(|user| user.email.clone())
+        .unwrap_or_else(|| referral.user_id.to_string());
+    let name = user.and_then(|user| user.name);
+
+    Ok(ReferralInfo {
+        id: referral.user_id.to_string(),
+        email,
+        name,
+        created_at: referral.created_at.to_rfc3339(),
+        total_consumption: bigdecimal_to_string(&usage_stats.total_cost),
+        earnings: bigdecimal_to_string(&earnings),
+    })
 }
 
 // ==================== API Handlers ====================
@@ -369,11 +431,9 @@ pub async fn list_distribution_records(
             .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?
     };
 
-    // 转换为响应格式
-    let responses: Vec<DistributionRecordResponse> = records
+    let filtered_records = records
         .into_iter()
         .filter(|r| {
-            // 应用状态筛选
             if let Some(ref status) = query.status {
                 r.status == *status
             } else {
@@ -381,26 +441,18 @@ pub async fn list_distribution_records(
             }
         })
         .filter(|r| {
-            // 应用层级筛选
             if let Some(ref level) = query.level {
                 r.level == *level
             } else {
                 true
             }
         })
-        .map(|r| DistributionRecordResponse {
-            id: r.id.to_string(),
-            usage_log_id: r.usage_log_id.to_string(),
-            tenant_id: r.tenant_id.to_string(),
-            beneficiary_id: r.beneficiary_id.to_string(),
-            beneficiary_name: r.beneficiary_id.to_string(), // 使用 ID 作为名称，前端可进一步查询
-            share_amount: bigdecimal_to_string(&r.share_amount),
-            share_ratio: bigdecimal_to_string(&r.share_ratio),
-            level: r.level.clone(),
-            status: r.status,
-            created_at: r.created_at.to_rfc3339(),
-        })
-        .collect();
+        .collect::<Vec<_>>();
+
+    let mut responses = Vec::with_capacity(filtered_records.len());
+    for record in filtered_records {
+        responses.push(build_distribution_record_response(pool, record).await?);
+    }
 
     Ok(Json(responses))
 }
@@ -705,42 +757,12 @@ pub async fn get_my_referrals(
     // 合并并转换为响应格式，查询真实收益
     let mut referrals: Vec<ReferralInfo> = Vec::new();
 
-    for r in level1_referrals {
-        // 查询该推荐用户产生的分销收益
-        let earnings = keycompute_db::DistributionRecord::get_earnings_for_referral(
-            pool,
-            auth.user_id,
-            r.user_id,
-        )
-        .await
-        .unwrap_or(BigDecimal::from(0));
-
-        referrals.push(ReferralInfo {
-            user_id: r.user_id.to_string(),
-            user_name: r.user_id.to_string(), // 使用 ID 作为名称
-            level: "level1".to_string(),
-            registered_at: r.created_at.to_rfc3339(),
-            total_earnings: bigdecimal_to_string(&earnings),
-        });
+    for referral in level1_referrals {
+        referrals.push(build_referral_info(pool, auth.user_id, referral).await?);
     }
 
-    for r in level2_referrals {
-        // 查询该推荐用户产生的分销收益
-        let earnings = keycompute_db::DistributionRecord::get_earnings_for_referral(
-            pool,
-            auth.user_id,
-            r.user_id,
-        )
-        .await
-        .unwrap_or(BigDecimal::from(0));
-
-        referrals.push(ReferralInfo {
-            user_id: r.user_id.to_string(),
-            user_name: r.user_id.to_string(),
-            level: "level2".to_string(),
-            registered_at: r.created_at.to_rfc3339(),
-            total_earnings: bigdecimal_to_string(&earnings),
-        });
+    for referral in level2_referrals {
+        referrals.push(build_referral_info(pool, auth.user_id, referral).await?);
     }
 
     Ok(Json(referrals))

@@ -269,7 +269,6 @@ fn test_tenant_info_with_config() {
     let config = TenantConfig {
         default_rpm_limit: 100,
         default_tpm_limit: 50000,
-        distribution_enabled: true,
     };
     let tenant_with_config = tenant.with_config(config);
 
@@ -277,12 +276,12 @@ fn test_tenant_info_with_config() {
         "keycompute-auth",
         "TenantInfo::with_config",
         format!(
-            "RPM: {}, TPM: {}, Distribution: {}",
+            "RPM: {}, TPM: {}",
             tenant_with_config.config.default_rpm_limit,
             tenant_with_config.config.default_tpm_limit,
-            tenant_with_config.config.distribution_enabled
         ),
-        tenant_with_config.config.default_rpm_limit == 100,
+        tenant_with_config.config.default_rpm_limit == 100
+            && tenant_with_config.config.default_tpm_limit == 50000,
     );
 
     chain.print_report();

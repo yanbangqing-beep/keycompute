@@ -113,8 +113,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if let Err(e) = validate_distribution_public_base_url(&pool, &config).await {
-        error!("运行时配置验证失败: {}", e);
-        std::process::exit(1);
+        warn!("运行时配置校验警告: {}", e);
     }
 
     // ==================== 阶段 6: 初始化应用状态 ====================
@@ -259,7 +258,6 @@ async fn initialize_default_admin(pool: &sqlx::PgPool) -> anyhow::Result<()> {
                 description: Some("System default tenant".to_string()),
                 default_rpm_limit: None,
                 default_tpm_limit: None,
-                distribution_enabled: None,
             },
         )
         .await?;
@@ -332,7 +330,7 @@ async fn validate_distribution_public_base_url(
     let distribution_enabled = SystemSetting::find_by_key(pool, setting_keys::DISTRIBUTION_ENABLED)
         .await?
         .map(|setting| setting.parse_bool())
-        .unwrap_or(false);
+        .unwrap_or(true);
 
     if distribution_enabled && config.app_base_url.is_none() {
         anyhow::bail!("APP_BASE_URL must be configured when distribution is enabled");

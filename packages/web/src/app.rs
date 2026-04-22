@@ -2,10 +2,10 @@ use dioxus::prelude::*;
 
 use crate::i18n::{I18n, Lang};
 use crate::router::Route;
-use crate::services::api_client::get_client;
-use crate::services::user_service;
+use crate::services::{api_client::get_client, settings_service, user_service};
 use crate::stores::{
     auth_store::AuthStore,
+    public_settings_store::{PublicSettingsState, PublicSettingsStore},
     ui_store::{ToastMsg, UiStore},
     user_store::{UserInfo, UserStore},
 };
@@ -20,6 +20,7 @@ pub fn App() -> Element {
     let auth_initial = AuthStore::load_from_storage();
     let auth_state = use_signal(|| auth_initial);
     let user_info = use_signal(|| None::<UserInfo>);
+    let public_settings_state = use_signal(PublicSettingsState::default);
     let toast_signal = use_signal(|| None::<ToastMsg>);
     let lang_signal = use_signal(|| {
         #[cfg(target_arch = "wasm32")]
@@ -34,8 +35,24 @@ pub fn App() -> Element {
 
     let auth_store = use_context_provider(|| AuthStore::new(auth_state));
     let mut user_store = use_context_provider(|| UserStore::new(user_info));
+    let public_settings_store =
+        use_context_provider(|| PublicSettingsStore::new(public_settings_state));
     let _ui_store = use_context_provider(|| UiStore::new(toast_signal));
     let _lang = use_context_provider(|| lang_signal);
+
+    use_effect(move || {
+        if public_settings_store.loaded() {
+            return;
+        }
+
+        spawn(async move {
+            let mut store = public_settings_store;
+            match settings_service::get_public().await {
+                Ok(settings) => store.set(settings),
+                Err(_) => store.mark_loaded(),
+            }
+        });
+    });
 
     // App 启动时或登录状态变化时，若已有 token，自动拉取用户信息
     use_effect(move || {
@@ -77,6 +94,7 @@ fn read_local_storage(key: &str) -> Option<String> {
 #[component]
 pub fn AppLayout() -> Element {
     let user_store = use_context::<UserStore>();
+    let public_settings_store = use_context::<PublicSettingsStore>();
     let mut auth_store = use_context::<AuthStore>();
     let ui_store = use_context::<UiStore>();
     let lang_signal = use_context::<Signal<String>>();
@@ -142,6 +160,21 @@ pub fn AppLayout() -> Element {
     let r_admin_tenants = Route::Tenants {}.to_string();
     let r_admin_system = Route::System {}.to_string();
     let r_admin_system_settings = Route::Settings {}.to_string();
+    let show_distribution_nav = public_settings_store.loaded()
+        && !matches!(public_settings_store.distribution_enabled(), Some(false));
+
+    let mut billing_nav_items = vec![NavItem::new(
+        i18n.t("nav.payments"),
+        r_payments,
+        NavIcon::Wallet,
+    )];
+    if show_distribution_nav {
+        billing_nav_items.push(NavItem::new(
+            i18n.t("nav.distribution"),
+            r_distribution,
+            NavIcon::Share,
+        ));
+    }
 
     let mut nav_sections = vec![
         NavSection {
@@ -161,10 +194,7 @@ pub fn AppLayout() -> Element {
         },
         NavSection {
             title: Some(i18n.t("nav.group.billing").to_string()),
-            items: vec![
-                NavItem::new(i18n.t("nav.payments"), r_payments, NavIcon::Wallet),
-                NavItem::new(i18n.t("nav.distribution"), r_distribution, NavIcon::Share),
-            ],
+            items: billing_nav_items,
         },
         NavSection {
             title: Some(i18n.t("nav.group.account").to_string()),

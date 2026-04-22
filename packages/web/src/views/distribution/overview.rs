@@ -1,12 +1,58 @@
 use dioxus::prelude::*;
 
 use crate::hooks::use_i18n::use_i18n;
-use crate::services::{api_client::with_auto_refresh, distribution_service};
-use crate::stores::auth_store::AuthStore;
+use crate::router::Route;
+use crate::services::{
+    api_client::{user_error_message, with_auto_refresh},
+    distribution_service,
+};
+use crate::stores::{
+    auth_store::AuthStore, public_settings_store::PublicSettingsStore, ui_store::UiStore,
+};
 use crate::utils::time::format_time;
 
 #[component]
 pub fn DistributionOverview() -> Element {
+    let i18n = use_i18n();
+    let public_settings_store = use_context::<PublicSettingsStore>();
+    let mut ui_store = use_context::<UiStore>();
+    let nav = use_navigator();
+
+    use_effect(move || {
+        if public_settings_store.loaded()
+            && matches!(public_settings_store.distribution_enabled(), Some(false))
+        {
+            ui_store.show_error(i18n.t("distribution.disabled_message"));
+            nav.replace(Route::Dashboard {});
+        }
+    });
+
+    if !public_settings_store.loaded() {
+        return rsx! {
+            div {
+                class: "page-container",
+                div {
+                    class: "distribution-loading",
+                    style: "display:flex;align-items:center;justify-content:center;padding:64px",
+                    div {
+                        style: "display:flex;align-items:center;gap:12px;color:var(--text-secondary,#64748b)",
+                        div { class: "spinner", style: "width:24px;height:24px" }
+                        span { {i18n.t("table.loading")} }
+                    }
+                }
+            }
+        };
+    }
+
+    if matches!(public_settings_store.distribution_enabled(), Some(false)) {
+        return rsx! {};
+    }
+
+    rsx! { DistributionOverviewContent {} }
+}
+
+#[component]
+fn DistributionOverviewContent() -> Element {
     let i18n = use_i18n();
     let auth_store = use_context::<AuthStore>();
 
@@ -36,7 +82,7 @@ pub fn DistributionOverview() -> Element {
 
     let total_earnings = match earnings() {
         Some(Ok(ref e)) => format!("¥{}", e.total_earnings),
-        Some(Err(_)) => i18n.t("common.load_failed").to_string(),
+        Some(Err(ref e)) => user_error_message(e),
         None => i18n.t("table.loading").to_string(),
     };
     let available_earnings = match earnings() {
@@ -53,7 +99,7 @@ pub fn DistributionOverview() -> Element {
     };
     let code_text = match referral_code() {
         Some(Ok(ref r)) => r.referral_code.clone(),
-        Some(Err(_)) => i18n.t("distribution.fetch_failed").to_string(),
+        Some(Err(ref e)) => user_error_message(e),
         None => i18n.t("table.loading").to_string(),
     };
     let invite_link = match referral_code() {
@@ -158,8 +204,8 @@ pub fn DistributionOverview() -> Element {
                                         }
                                     }
                                 },
-                                Some(Err(_)) => rsx! {
-                                    tr { td { colspan: "4", class: "table-empty", {i18n.t("common.load_failed")} } }
+                                Some(Err(ref e)) => rsx! {
+                                    tr { td { colspan: "4", class: "table-empty", {user_error_message(e)} } }
                                 },
                                 _ => rsx! {
                                     tr { td { colspan: "4", class: "table-empty", {i18n.t("distribution.no_referrals")} } }

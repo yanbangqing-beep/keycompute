@@ -116,14 +116,14 @@ impl AdminSystemSettings {
             maintenance_mode: get_bool(setting_keys::MAINTENANCE_MODE, false),
             maintenance_message: get_value(setting_keys::MAINTENANCE_MESSAGE),
 
-            distribution_enabled: get_bool(setting_keys::DISTRIBUTION_ENABLED, false),
+            distribution_enabled: get_bool(setting_keys::DISTRIBUTION_ENABLED, true),
             distribution_level1_default_ratio: get_decimal(
                 setting_keys::DISTRIBUTION_LEVEL1_DEFAULT_RATIO,
                 0.03,
             ),
             distribution_level2_default_ratio: get_decimal(
                 setting_keys::DISTRIBUTION_LEVEL2_DEFAULT_RATIO,
-                0.01,
+                0.02,
             ),
             distribution_min_withdraw: get_decimal(setting_keys::DISTRIBUTION_MIN_WITHDRAW, 10.0),
 
@@ -224,6 +224,31 @@ fn ensure_distribution_has_public_base_url(
     Ok(())
 }
 
+fn requires_system_role_for_setting(key: &str) -> bool {
+    key == setting_keys::DISTRIBUTION_ENABLED
+}
+
+fn ensure_setting_update_allowed(auth: &AuthExtractor, key: &str) -> Result<()> {
+    if requires_system_role_for_setting(key) && auth.role != "system" {
+        return Err(ApiError::Forbidden(
+            "Only system can update distribution_enabled".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_settings_update_allowed(
+    auth: &AuthExtractor,
+    settings: &std::collections::HashMap<String, String>,
+) -> Result<()> {
+    for key in settings.keys() {
+        ensure_setting_update_allowed(auth, key)?;
+    }
+
+    Ok(())
+}
+
 fn payload_to_settings_map(
     payload: serde_json::Value,
 ) -> Result<std::collections::HashMap<String, String>> {
@@ -316,6 +341,7 @@ pub async fn update_system_settings(
         .ok_or_else(|| ApiError::Internal("Database not configured".to_string()))?;
 
     let settings_map = normalize_settings_map(payload_to_settings_map(payload)?)?;
+    ensure_settings_update_allowed(&auth, &settings_map)?;
     ensure_distribution_has_public_base_url(state.app_base_url.as_deref(), &settings_map)?;
 
     // 批量更新设置
@@ -387,6 +413,8 @@ pub async fn update_system_setting_by_key(
         return Err(ApiError::NotFound(format!("Setting not found: {}", key)));
     }
 
+    ensure_setting_update_allowed(&auth, &key)?;
+
     let normalized_value = normalize_setting_update(&key, payload.value)?;
     let mut settings_map = std::collections::HashMap::new();
     settings_map.insert(key.clone(), normalized_value.clone());
@@ -428,6 +456,7 @@ pub async fn get_public_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn test_hidden_setting_marks_default_user_role() {
@@ -513,5 +542,21 @@ mod tests {
             ensure_distribution_has_public_base_url(Some("https://app.example.com"), &settings)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn test_distribution_toggle_requires_system_role() {
+        let auth = AuthExtractor::new(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), "admin");
+
+        let err =
+            ensure_setting_update_allowed(&auth, setting_keys::DISTRIBUTION_ENABLED).unwrap_err();
+        assert!(matches!(err, ApiError::Forbidden(msg) if msg.contains("Only system")));
+    }
+
+    #[test]
+    fn test_distribution_toggle_allows_system_role() {
+        let auth = AuthExtractor::new(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), "system");
+
+        assert!(ensure_setting_update_allowed(&auth, setting_keys::DISTRIBUTION_ENABLED).is_ok());
     }
 }

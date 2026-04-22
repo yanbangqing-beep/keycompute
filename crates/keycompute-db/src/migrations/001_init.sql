@@ -8,7 +8,6 @@ CREATE TABLE tenants (
     -- 租户配置
     default_rpm_limit INTEGER NOT NULL DEFAULT 60,
     default_tpm_limit INTEGER NOT NULL DEFAULT 100000,
-    distribution_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -530,9 +529,9 @@ INSERT INTO system_settings (key, value, value_type, description) VALUES
     ('maintenance_message', '', 'string', '维护模式提示信息'),
     
     -- 分销设置
-    ('distribution_enabled', 'false', 'bool', '是否启用分销系统'),
+    ('distribution_enabled', 'true', 'bool', '是否启用分销系统'),
     ('distribution_level1_default_ratio', '0.03', 'decimal', '一级分销默认分成比例'),
-    ('distribution_level2_default_ratio', '0.01', 'decimal', '二级分销默认分成比例'),
+    ('distribution_level2_default_ratio', '0.02', 'decimal', '二级分销默认分成比例'),
     ('distribution_min_withdraw', '10.00', 'decimal', '最低提现金额'),
     
     -- 支付设置
